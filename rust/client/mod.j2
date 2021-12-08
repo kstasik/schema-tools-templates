@@ -1,0 +1,178 @@
+{# type=endpoints,filename=%options.namespace%/mod.rs,min_version=0.2.0 #}
+{% import "macros.j2" as m -%}
+{% import "extra.j2" as e -%}
+{{ m::do_not_modify() }}
+{% set_global apm = options.apm | default(value = []) %}
+
+{% set allowed_operations = e::allowed_operations(endpoints=endpoints, options=options) | split(pat=" ") %}
+{% set opentelemetry = options.opentelemetry | default(value=false) %}
+{% set filtered_endpoints = endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
+
+use std::collections::HashMap;
+use reqwest::header::{HeaderName, HeaderValue};
+use super::error::{ClientError, ApiError};
+{% if "tracing" in apm %}
+use tracing::Span;
+use tracing::Instrument;
+{% if "opentelemetry" in apm %}
+use opentelemetry::propagation::TextMapPropagator;
+use opentelemetry::sdk::propagation::TraceContextPropagator;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+{% endif %}
+{% endif %}
+
+#[allow(dead_code, unused_imports)]
+pub mod model;
+#[allow(dead_code, unused_imports)]
+pub mod endpoint;
+
+#[derive(Clone)]
+pub struct {{ options.name }} {
+    pub client: reqwest::Client,
+    pub uri: String,
+    pub auth: HashMap<String, HashMap<HeaderName, HeaderValue>>,
+}
+
+impl {{ options.name }} {
+    #[allow(dead_code)]
+    pub fn new(uri: String, client: reqwest::Client) -> Self {
+        Self {
+            client,
+            uri,
+            auth: HashMap::new(),
+        }
+    }
+
+    {% for sec in security.all %}
+    #[allow(dead_code)]
+    pub fn with_auth_{{ sec.scheme_name | snakecase }}(mut self, value: &str) -> Self {
+        let headers = self.auth.entry("{{ sec.scheme_name }}".to_string()).or_insert(HashMap::new());
+        headers.insert(HeaderName::from_static("{{ m::get_auth_header(security = sec) | lower }}"), HeaderValue::from_str(value).unwrap());
+
+        self
+    } 
+    {% endfor %}
+
+    {% for endpoint in filtered_endpoints %} 
+    {% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+    {% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
+    
+    {% for success in endpoint.responses.success.models.all | default(value = ["no-models"]) %}
+    #[allow(dead_code)]
+    pub async fn {{ endpoint.operation | snakecase }}{% if success.vnd %}_{{ success.vnd | snakecase }}{% endif %}(
+        &self, {{ e::endpoint_parameters(endpoint=endpoint, options=options) }}
+        {%- for p in endpoint.parameters.path %} {{ m::property_name(name = p.name) }}: {{ m::type(property = p.model, ns = "model") }},{% endfor -%}
+        {%- if endpoint.requestbody.models.default %} body: {{ m::type(property = endpoint.requestbody.models.default.model, ns = "model" ) }}, {% endif -%}
+        {%- if endpoint.parameters.query | length > 0 %} query: endpoint::{{ endpoint.operation | pascalcase }}Query, {% endif %}
+        {%- if filtered_headers | length > 0 %} headers: endpoint::{{ endpoint.operation | pascalcase }}Headers, {% endif %}
+    ) -> {{ m::endpoint_return(success = success, endpoint = endpoint, options = options) }} {
+        {% if "tracing" in apm %}
+        let span = tracing::info_span!(
+            "dependency",
+
+            otel.name = "{{ endpoint.path | path_parts(to="?") }}",
+            otel.kind = "CLIENT",
+
+            http.method = "{{ endpoint.method | upper }}",
+            http.url = format!("{}{{ endpoint.path | path_parts(to="?") }}", self.uri).as_str(),
+            http.status_code = tracing::field::Empty
+        );
+        {% endif %}
+        
+        let request = self.client.{{ endpoint.method }}(&format!("{}{{ endpoint.path | path_parts(to="{}") }}", self.uri
+                {%- for q in endpoint.parameters.path %}
+            , {{ m::to_string(q = q.model, required = true, name = m::property_name(name = q.name) ) }}
+            {% endfor -%}
+        ));
+
+        // setup headers
+        let mut final_headers = vec![{% if success != "no-models" %}(
+            HeaderName::from_static("accept"),
+            HeaderValue::from_static("{{ success.content_type }}"),
+        ),{% endif %}{%- if endpoint.requestbody.models.default %}(
+            HeaderName::from_static("content-type"),
+            HeaderValue::from_static("{{ endpoint.requestbody.models.default.content_type }}"),
+        ),
+        {% endif %}];
+
+        {% if "opentelemetry" in apm %}
+        // trace context opentelemetry propagation
+        let current_context = Span::current().context();
+        let mut trace_headers = HashMap::new();
+        TraceContextPropagator::new().inject_context(&current_context, &mut trace_headers);
+        final_headers.append(&mut trace_headers
+                .iter()
+                .map(|(name, val)| (HeaderName::from_bytes(name.as_ref()), HeaderValue::from_bytes(val.as_ref())))
+                .filter(|(k, v)| k.is_ok() && v.is_ok())
+                .map(|(k, v)| (k.unwrap(), v.unwrap()))
+                .collect::<Vec<_>>());
+        {% endif %}
+
+        {%- if filtered_headers | length > 0 %}
+        final_headers.append(&mut headers.into_vec());
+        {% endif %}
+
+        {% for sec in endpoint.security %}
+        if let Some(auth_headers) = self.auth.get("{{ sec.scheme_name }}") {
+            final_headers.append(
+                &mut auth_headers.clone().into_iter().collect::<Vec<_>>()
+            );
+        }
+        {% endfor %}
+
+        {{ e::endpoint_block(endpoint=endpoint, options=options) }}
+        
+        let response = {% if "tracing" in apm %}async move { {% endif %}
+            request
+                {%- if endpoint.parameters.query | length > 0 %} 
+                .query(&query.into_vec())
+                {% endif %}
+                {%- if endpoint.requestbody.models.default %}.json(&body){% endif -%}
+                .headers(
+                    final_headers 
+                        .iter()
+                        .cloned()
+                        .collect()
+                )
+                .send()
+                .await
+                {% if "opentelemetry" in apm %}
+                .map(|res| {
+                    let code = res.status().as_u16();
+
+                    Span::current().record("http.status_code", &(code as i64));
+
+                    if code >= 400 {
+                        tracing::error!("HTTP Response status code: {}", code);
+                    }
+                    
+                    res
+                })
+                {% endif %}
+                .map_err(|e| {
+                    {% if "tracing" in apm %}tracing::error!("reqwest failed(): {}", e);{% endif %}
+                    {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }}
+                })
+        {% if "tracing" in apm %}
+        }
+        .instrument(span)
+        .await{% endif %}?;
+
+        let status = response.status();
+        if status.is_success() {
+            {% if success.model %}
+            return response
+                .json::<{{ m::type(property = success.model, ns = "model") }}>()
+                .await
+                .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
+            {% else %}
+            return Ok({{ m::endpoint_default_response(endpoint = endpoint, options = options) }}::from_response(response))
+            {% endif %}
+        }
+
+        Err({{ m::endpoint_handle_error(endpoint = endpoint, options = options, response = "response") }})
+    }
+
+    {% endfor %}
+    {% endfor %}
+}

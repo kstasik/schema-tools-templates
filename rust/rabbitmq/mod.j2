@@ -1,0 +1,25 @@
+{# type=static,filename=rabbitmq/mod.rs,min_version=0.2.0 #}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
+
+use lapin::types::FieldTable;
+use serde::Serialize;
+
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod message;
+{% if options.client | default(value="none") == "actix" %}#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod actix;{% endif %}
+
+pub trait MessageExtractor {
+    fn get_type() -> String;
+    fn extract(headers: FieldTable, data: &str) -> Option<Self> where Self: std::marker::Sized;
+}
+
+pub trait Message {
+    type Meta: From<FieldTable> + Into<FieldTable>;
+    type Payload: Serialize;
+
+    fn split(self) -> (Self::Meta, Self::Payload);
+}

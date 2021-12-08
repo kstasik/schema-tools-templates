@@ -1,0 +1,19 @@
+{% macro allowed_operations(endpoints, options) -%}{% filter trim %}
+{%- for endpoint in endpoints -%} 
+{{ endpoint.operation }} {% endfor -%}
+{% endfilter %}{%- endmacro allowed_operations %}
+
+{% macro skipped_headers(endpoint, options) -%}{% filter trim %}
+traceparent tracestate
+{% endfilter %}{%- endmacro skipped_headers %}
+
+{% macro endpoint_parameters(endpoint, options) -%}{%- endmacro additional_parameters %}
+{% macro endpoint_block(endpoint, options) -%}{%- endmacro additional_parameters %}
+
+{% macro log(type, options) -%}{% filter trim %}
+{% if options.log | default(value = "tracing") == "tracing" %}
+tracing::{{ type }}!
+{% elif options.log == "log" %}
+log::{{ type }}!
+{% endif %}
+{% endfilter %}{%- endmacro log %}

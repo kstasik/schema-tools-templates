@@ -1,0 +1,41 @@
+DatetimeType:
+  description: Date and time in iso standard.
+  type: string
+  format: date-time
+  example: '2018-08-08T12:13:14Z'
+
+OrderDirectionType:
+  type: string
+  description: Order direction asc or desc.
+  enum: [ asc, desc ]
+
+PercentType:
+  type: string
+  description: Percent type.
+  format: decimal
+  pattern: ([0,1](\.[0-9]{1,4})?)
+
+TraceParent:
+  type: string
+
+TraceState:
+  type: string
+
+MultipleResources:
+  type: object
+  required: ['data']
+
+SingleResource:
+  type: object
+  required: ['data']
+
+ErrorResource:
+  type: object
+  required: ['error']
+  properties:
+    error:
+      type: object
+      required: ['code']
+      properties:
+        code:
+          type: string

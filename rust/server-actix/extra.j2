@@ -1,0 +1,30 @@
+{%- import "macros.j2" as m -%}
+
+{% macro log(type, options) -%}{% filter trim %}
+{% if options.log | default(value = "tracing") == "tracing" %}
+tracing::{{ type }}!
+{% elif options.log == "log" %}
+log::{{ type }}!
+{% endif %}
+{% endfilter %}{%- endmacro log %}
+
+{% macro skipped_headers(endpoint, options) -%}{% filter trim %}
+traceparent tracestate
+{% endfilter %}{%- endmacro skipped_headers %}
+
+{% macro endpoint_parameters(endpoint) -%}
+{% if endpoint.parameters.path | length > 0 %}
+super::endpoint::{{ endpoint.operation | pascalcase }}Path,
+{% endif %}
+{% if endpoint.parameters.query | length > 0 %}
+super::endpoint::{{ endpoint.operation | pascalcase }}Query,
+{% endif %}
+{% if endpoint.requestbody.models.default -%}
+super::model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }},
+{% endif %}
+{% set skipped_headers = self::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+{% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
+{% if filtered_headers | length > 0 %}
+super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
+{% endif %}
+{%- endmacro endpoint_parameters %}
