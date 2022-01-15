@@ -1,0 +1,55 @@
+livez200:
+  description: Service is live.
+  content:
+    application/json:
+      schema:
+        $ref: schemas.yaml#/ServiceStatus
+
+livez500:
+  description: Service is dead.
+  content:
+    application/json:
+      schema:
+        $ref: schemas.yaml#/ServiceStatus
+  
+readyz200:
+  description: Service is ready.
+  content:
+    application/json:
+      schema:
+        $ref: schemas.yaml#/ServiceStatus
+
+readyz500:
+  description: Service is not ready.
+  content:
+    application/json:
+      schema:
+        $ref: schemas.yaml#/ServiceStatus
+
+internalServerError500:
+  description: Internal server error.
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../types.yaml#/ErrorResource
+          - type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    enum: ['internal-server-error']
+
+forbidden403:
+  description: Forbidden error.
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: ['forbidden']

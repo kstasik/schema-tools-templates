@@ -1,0 +1,165 @@
+openapi: 3.0.0
+info:
+  version: 0.1.0
+  title: Management Api
+tags:
+  - name: health
+    description: Healtcheck endpoints 
+  - name: devices
+    description: Device related endpoints
+  - name: accessories
+    description: Accessories related endpoints
+security:
+  - basicAuth: []
+components:
+  schemas:
+    TraceState:
+      $ref: types.yaml#/TraceState
+    TraceParent:
+      $ref: types.yaml#/TraceParent
+    ServiceStatus:
+      $ref: components/schemas.yaml#/ServiceStatus
+    Device:
+      $ref: components/devices/schemas.yaml#/Device
+    Accessory:
+      $ref: components/accessories/schemas.yaml#/Accessory
+
+  responses:
+    # common
+    internalServerError500:
+      $ref: components/responses.yaml#/internalServerError500
+    forbidden403:
+      $ref: components/responses.yaml#/forbidden403
+
+    # health responses
+    livez200:
+      $ref: components/responses.yaml#/livez200
+    livez500:
+      $ref: components/responses.yaml#/livez500
+    readyz200:
+      $ref: components/responses.yaml#/readyz200
+    readyz500:
+      $ref: components/responses.yaml#/readyz500
+
+    # devices
+    getDevice200:
+      $ref: components/devices/responses.yaml#/getDevice200
+    getDevice400:
+      $ref: components/devices/responses.yaml#/getDevice400
+    listDevices200:
+      $ref: components/devices/responses.yaml#/listDevices200
+    listDevices400:
+      $ref: components/devices/responses.yaml#/listDevices400
+    createDevice201:
+      $ref: components/devices/responses.yaml#/createDevice201
+    createDevice400:
+      $ref: components/devices/responses.yaml#/createDevice400
+
+  requestBodies:
+    createDevice:
+      $ref: components/devices/request-bodies.yaml#/createDevice
+
+  parameters:
+    traceParentHeader:
+      $ref: components/parameters.yaml#/traceParentHeader
+    traceStateHeader:
+      $ref: components/parameters.yaml#/traceStateHeader
+    listDevicesFilterQuery:
+      $ref: components/devices/parameters.yaml#/listDevicesFilterQuery
+    listDevicesSortQuery:
+      $ref: components/devices/parameters.yaml#/listDevicesSortQuery
+    deviceIdPath:
+      $ref: components/devices/parameters.yaml#/deviceIdPath
+
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+
+paths:
+  # healthchecks
+  /livez:
+    get:
+      tags:
+        - health
+      description: Indicates if service is working correctly.
+      operationId: isLive
+      security: [] # insecure
+      responses:
+        200:
+          $ref: '#/components/responses/livez200'
+        500:
+          $ref: '#/components/responses/livez500'
+  /readyz:
+    get:
+      tags:
+        - health
+      description: Indicates if service is ready to handle requests.
+      operationId: isReady
+      security: [] # insecure
+      responses:
+        200:
+          $ref: '#/components/responses/readyz200'
+        500:
+          $ref: '#/components/responses/readyz500'
+
+  # devices
+  /v1/devices:
+    get:
+      tags:
+        - devices
+      description: Get all devices
+      operationId: getDevices
+      responses:
+        200:
+          $ref: '#/components/responses/listDevices200'
+        400:
+          $ref: '#/components/responses/listDevices400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/listDevicesFilterQuery'
+        - $ref: '#/components/parameters/listDevicesSortQuery'
+    post:
+      tags:
+        - devices
+      description: Create device
+      operationId: createDevice
+      responses:
+        201:
+          $ref: '#/components/responses/createDevice201'
+        400:
+          $ref: '#/components/responses/createDevice400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+      requestBody:
+        $ref: '#/components/requestBodies/createDevice'
+ 
+  /v1/devices/{deviceId}:
+    get:
+      tags:
+        - devices
+      description: Get device by id
+      operationId: getDevice
+      responses:
+        200:
+          $ref: '#/components/responses/getDevice200'
+        400:
+          $ref: '#/components/responses/getDevice400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/deviceIdPath'

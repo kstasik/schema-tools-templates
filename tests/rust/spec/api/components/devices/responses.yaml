@@ -1,0 +1,131 @@
+# get
+getDevice200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: GetDeviceResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Device
+
+getDevice400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
+# list
+listDevices200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: ListDevicesResponse
+        allOf:
+          - $ref: ../../types.yaml#/MultipleResources
+          - properties:
+              data:
+                type: array
+                items:
+                  $ref: schemas.yaml#/Device
+
+listDevices400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
+# get
+getDevice200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: GetDeviceResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Device
+
+createDevice201:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+
+createDevice400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'already-exists' ]

@@ -1,0 +1,9 @@
+Accessory:
+  additionalProperties: false
+  type: object
+  required:
+    - accessoryId 
+  properties:
+    accessoryId:
+      type: string
+      format: uuid

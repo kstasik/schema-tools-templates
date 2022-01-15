@@ -1,0 +1,18 @@
+{# type=models,filename=rabbitmq/message.rs,min_version=0.2.0 #}
+{% extends "models.j2" %}
+{% block use %}
+use amq_protocol_types::{AMQPValue, LongString, ShortString};
+use chrono::prelude::{DateTime, Utc};
+use lapin::types::FieldTable;
+use std::str::FromStr;
+{% endblock use %}
+
+{% block end %}
+
+fn generate_time_string() -> String {
+    let now = std::time::SystemTime::now();
+    let now: DateTime<Utc> = now.into();
+
+    now.to_rfc3339()
+}
+{% endblock end %}

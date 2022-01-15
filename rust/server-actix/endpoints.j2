@@ -1,0 +1,191 @@
+{# type=tags,filename=api/endpoint.rs,min_version=0.2.0 #}
+{%- import "macros.j2" as m -%}
+{%- import "extra.j2" as e -%}
+{{ m::do_not_modify() }}
+use actix_web::{HttpResponse, http::{StatusCode, header::HeaderName}};
+use serde::{de::{self, IntoDeserializer}, Deserialize};
+use std::fmt;
+
+{% set_global froms = [] %}
+{% set_global froms_with_headers = [] %}
+
+{% for tag in tags %}
+{% for endpoint in tag.endpoints %}
+//
+// {{ endpoint.method }} {{ endpoint.path }}
+//
+{% if endpoint.parameters.path | length > 0 -%}
+#[derive(Deserialize)]
+pub struct {{ endpoint.operation | pascalcase }}Path{
+	{% for param in endpoint.parameters.path %}
+	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
+	pub {{ m::property_name(name = param.name) }}: {{ m::type(property = param.model) }},
+	{% endfor %}
+}
+
+{% endif -%}
+
+{%- if endpoint.parameters.query | length > 0 %}
+#[derive(Deserialize)]
+pub struct {{ endpoint.operation | pascalcase }}Query{
+	{% for param in endpoint.parameters.query %}
+	{% if param.style == 'form' and param.explode == false %}
+	#[serde(rename = "{{ param.name }}", deserialize_with = "deserialized_id_list"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
+	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}Vec<{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %}>,
+	{% else %}
+	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
+	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %},
+	{% endif %}
+	{% endfor %}
+}
+
+{% endif -%}
+
+{% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+{% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
+{%- if filtered_headers | length > 0 %}
+#[derive(Deserialize)]
+pub struct {{ endpoint.operation | pascalcase }}RequestHeaders{
+	{% for param in filtered_headers %}
+	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
+	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %},
+	{% endfor %}
+}
+
+impl actix_web::FromRequest for {{ endpoint.operation | pascalcase }}RequestHeaders {
+    type Error = actix_web::Error;
+    type Future = actix::fut::Ready<Result<Self, Self::Error>>;
+
+    #[inline]
+    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        todo!()
+    }
+}
+{% endif -%}
+
+{% for response in endpoint.responses.all %}
+{% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+{% if filtered_response_headers | length > 0 %}
+#[derive(Deserialize)]
+pub struct {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers{
+    {% for param in filtered_response_headers %}
+	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
+	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %},
+	{% endfor %}
+}
+{% endif %}
+{% endfor %}
+
+{% for response in endpoint.responses.all %}
+{% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+{% if filtered_response_headers | length > 0 %}
+{% if froms_with_headers is not containing(response.models.default.model.model.name) %}
+pub struct {{ m::type(property = response.models.default.model, ns = "") }}WithHeaders {
+    body: {{ m::type(property = response.models.default.model, ns = "super::model") }},
+    headers: {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers
+}
+
+{% set_global froms_with_headers = froms_with_headers | concat(with=response.models.default.model.model.name) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+pub enum {{ endpoint.operation | pascalcase }}Response {
+	{% for response in endpoint.responses.all %}
+    {% if not response.models %}
+    Status{{ response.statusCode }},
+    {% else %}
+    {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+	Status{{ response.statusCode }}({% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}),
+    {% endif %}
+	{% endfor %}
+}
+
+impl From<{{ endpoint.operation | pascalcase }}Response> for HttpResponse {
+    fn from(response: {{ endpoint.operation | pascalcase }}Response) -> HttpResponse {
+			match response {
+				{% for response in endpoint.responses.all %}
+                {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+				{{ endpoint.operation | pascalcase }}Response::Status{{ response.statusCode }}{% if response.models %}(d) => d.into(){% else %} => HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap()).finish(){% endif %},
+				{% endfor %}
+			}
+    }
+}
+
+impl<O, E> From<Result<O, E>> for {{ endpoint.operation | pascalcase }}Response where O: Into<{{ endpoint.operation | pascalcase }}Response>, E: Into<{{ endpoint.operation | pascalcase }}Response> {
+    fn from(res: Result<O, E>) -> Self {
+        match res {
+            Ok(r) => r.into(),
+            Err(e) => e.into()
+        }
+    }
+}
+
+{% for response in endpoint.responses.all %}
+{% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+
+{% if response.models %}
+{% if froms is not containing(response.models.default.model.model.name) %}
+impl From<{% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}> for HttpResponse {
+    fn from(d: {% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}) -> HttpResponse {
+        let mut builder = HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap())
+                {% for param in filtered_response_headers | filter(attribute="required", value=true) %}
+                .append_header((HeaderName::from_static("{{ param.name }}"), d.headers.{{ m::property_name(name = param.name) }}))
+                {% endfor %};
+
+            {% for param in filtered_response_headers | filter(attribute="required", value=false)  %}
+            if let Some(header) = d.headers.{{ m::property_name(name = param.name) }} {
+                builder.append_header((HeaderName::from_static("{{ param.name }}"), header));
+            }
+            {% endfor %}
+        
+            builder.json({% if filtered_response_headers | length == 0 %}d{% else %}d.body{% endif %})
+    }
+}
+
+// todo: if schema object is unique
+impl From<{% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}> for {{ endpoint.operation | pascalcase }}Response {
+    fn from(data: {% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}) -> Self {
+        {{ endpoint.operation | pascalcase }}Response::Status{{ response.statusCode }}(data)
+    }
+}
+
+{% set_global froms = froms | concat(with=response.models.default.model.model.name) %}
+{% endif %}
+
+{% endif %}
+{% endfor %}
+
+{% endfor %}
+{% endfor %}
+
+pub fn deserialized_id_list<'de, D, I>(deserializer: D) -> std::result::Result<Vec<I>, D::Error>
+where
+    D: de::Deserializer<'de>,
+    I: de::DeserializeOwned,
+{
+    struct StringVecVisitor<I>(std::marker::PhantomData<I>);
+
+    impl<'de, I> de::Visitor<'de> for StringVecVisitor<I>
+    where I: de::DeserializeOwned {
+        type Value = Vec<I>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string containing a list")
+        }
+
+        fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let mut ids = Vec::new();
+            for id in v.split(",") {
+                let id = I::deserialize(id.into_deserializer())?;
+                ids.push(id);
+            }
+            Ok(ids)
+        }
+    }
+
+    deserializer.deserialize_any(StringVecVisitor(std::marker::PhantomData::<I>))
+}

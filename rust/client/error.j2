@@ -1,0 +1,42 @@
+{# type=static,filename=error.rs,min_version=0.2.0 #}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
+
+use std::future::Future;
+use std::pin::Pin;
+
+pub trait ApiError {
+    fn extract(response: reqwest::Response) -> Pin<Box<dyn Future<Output = Option<Self>> + Send>> where Self: Sized;
+}
+
+#[derive(Debug)]
+pub enum ClientError<T> where T: ApiError +  PartialEq {
+    Error(T),
+    ReqwestError(reqwest::Error),
+    UnsupportedError,
+}
+
+impl<T> ClientError<T> where T: ApiError + PartialEq {
+    pub fn from_reqwest(reqwest: reqwest::Error) -> Self {
+        Self::ReqwestError(reqwest)
+    }
+
+    pub async fn from_response(response: reqwest::Response) -> Self {
+        T::extract(response)
+            .await
+            .map_or(Self::UnsupportedError, Self::Error)
+    }
+}
+
+impl<T> std::fmt::Display for ClientError<T> 
+where
+    T: ApiError + std::fmt::Debug + PartialEq {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "api error occured: {:?}", self)
+    }
+}
+
+
+impl<T> std::error::Error for ClientError<T> 
+where
+    T: ApiError + std::fmt::Debug + PartialEq { }

@@ -1,0 +1,104 @@
+{% macro model_object_impl(model, options) %}
+{% set names = model.object.properties | map(attribute="name") %}
+{% if model.object.name is ending_with("Meta") %}
+impl std::convert::Into<FieldTable> for {{ m::model_name(name = model.object.name) }} {
+    fn into(self) -> FieldTable {
+        let mut headers = FieldTable::default();
+
+        {% for property in model.object.properties %}
+        {%- if property.required %}
+        {% if property.type == "const" %}
+        headers.insert(
+            ShortString::from("{{ property.name }}"),
+            AMQPValue::from(LongString::from("{{ property.model.name }}")),
+        );
+        {% else %}
+        headers.insert(
+            ShortString::from("{{ property.name }}"),
+            AMQPValue::from(LongString::from(self.{{ m::property_name(name = property.name) }})),
+        );
+        {% endif %}
+        {% else %}
+        if let Some(param) = self.{{ m::property_name(name = property.name) }} {
+            headers.insert(
+                ShortString::from("{{ property.name }}"),
+                AMQPValue::from(LongString::from({{ m::model_to_string(name = "param", property = property) }})),
+            );
+        }
+        {% endif %}
+        {% endfor %}
+
+        headers.insert(
+            ShortString::from("published-at"),
+            AMQPValue::from(LongString::from(generate_time_string()))
+        );
+
+        headers.insert(
+            ShortString::from("content-type"),
+            AMQPValue::from(LongString::from("application/json"))
+        );
+
+        headers
+    }
+}
+
+impl std::convert::From<FieldTable> for {{ m::model_name(name = model.object.name) }} {
+    fn from(ft: FieldTable) -> Self {
+        let bt = ft.inner();
+
+        Self {
+            {% for property in model.object.properties | filter_not(attribute="type", value="const") %}
+            {{ m::property_name(name = property.name) }}: 
+                bt.get(
+                    "{{ property.name }}"
+                ).and_then(|s| match s {
+                    lapin::types::AMQPValue::LongString(s) => Some(s.to_string()),
+                    _ => None
+                })
+                {% if property.type == "enum" %}
+                .and_then(|s|
+                    {{ m::type(property = property, ns = "") }}::from_str(&s).ok() // todo: error
+                )
+                {% endif %},
+            {% endfor %}
+        }
+    }
+}
+
+impl {{ m::model_name(name = model.object.name) }} {
+    {% set type_property = model.object.properties | filter(attribute="name", value="type") | first %}
+    fn get_type() -> String {
+        "{{ type_property.model.name }}".to_string()
+    }
+}
+
+{% elif names is containing("meta") and names is containing("payload") %}
+{% set meta = model.object.properties | filter(attribute="name", value="meta") | first %}
+{% set payload = model.object.properties | filter(attribute="name", value="payload") | first %}
+
+impl super::Message for {{ m::model_name(name = model.object.name) }} {
+   
+    type Meta = {{ m::type(property = meta) }};
+    type Payload = {{ m::type(property = payload) }};
+
+    fn split(self) -> (Self::Meta, Self::Payload) {
+        (self.meta, self.payload)
+    }
+}
+
+impl super::MessageExtractor for {{ m::model_name(name = model.object.name) }} {
+    fn get_type() -> String {
+        {{ m::type(property = meta) }}::get_type()
+    }
+
+    fn extract(headers: FieldTable, data: &str) -> Option<Self> {
+        let payload: Result<{{ m::type(property = payload) }}, _> = serde_json::from_str(data);
+
+        Some(Self {
+            meta: {{ m::type(property = meta) }}::from(headers),
+            payload: payload.ok()?,
+        })
+    }
+}
+{% endif %}
+{% endmacro model_object_impl %}

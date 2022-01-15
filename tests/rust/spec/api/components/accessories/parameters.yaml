@@ -1,0 +1,7 @@
+accessoryIdPathParameter:
+  in: path 
+  name: accessoryId
+  required: true
+  schema:
+    type: string
+    format: uuid

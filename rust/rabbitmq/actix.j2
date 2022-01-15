@@ -1,0 +1,791 @@
+{# type=static,filename=rabbitmq/actix.rs,min_version=0.2.0,if=%options.client%:actix #}
+{%- import "extra.j2" as e -%}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
+{% set_global apm = options.apm | default(value = []) %}
+
+pub mod manager {
+    use actix::*;
+    use backoff::backoff::Backoff;
+    use backoff::ExponentialBackoff;
+    use lapin::{options::ConfirmSelectOptions, Connection, ConnectionProperties};
+
+    pub struct RabbitmqManager {
+        uri: String,
+        backoff: ExponentialBackoff,
+        connection: Option<Connection>,
+    }
+
+    impl Supervised for RabbitmqManager {}
+
+    impl RabbitmqManager {
+        pub fn start<S: Into<String>>(uri: S) -> Addr<Self> {
+            let uri = uri.into();
+            let mut backoff = ExponentialBackoff::default();
+            backoff.max_elapsed_time = None;
+
+            Supervisor::start(|_| Self {
+                uri,
+                backoff,
+                connection: None,
+            })
+        }
+    }
+
+    impl Actor for RabbitmqManager {
+        type Context = Context<Self>;
+
+        fn started(&mut self, ctx: &mut Context<Self>) {
+            let uri = self.uri.clone();
+            async move { Connection::connect(uri.as_str(), ConnectionProperties::default()).await }
+                .into_actor(self)
+                .map(|res, act, ctx| match res {
+                    Ok(connection) => {
+                        act.connection = Some(connection);
+                        act.backoff.reset();
+                    }
+                    Err(err) => {
+                        {{ e::log(type = "error", options = options) }}("Cannot connect to rabbitmq: {}", err);
+
+                        if let Some(timeout) = act.backoff.next_backoff() {
+                            ctx.run_later(timeout, |_, ctx| ctx.stop());
+                        }
+                    }
+                })
+                .wait(ctx);
+        }
+
+        fn stopped(&mut self, _: &mut Self::Context) {
+            self.connection.take();
+        }
+    }
+
+    pub struct CreateConsumer {
+        pub configuration: super::consumer::Configuration,
+    }
+
+    #[derive(Debug)]
+    pub enum CreateConsumerError {
+        Lapin(lapin::Error),
+        NotReady,
+    }
+
+    impl Message for CreateConsumer {
+        type Result = Result<lapin::Consumer, CreateConsumerError>;
+    }
+
+    impl<'a> Handler<CreateConsumer> for RabbitmqManager {
+        type Result = ResponseActFuture<Self, Result<lapin::Consumer, CreateConsumerError>>;
+
+        fn handle(&mut self, msg: CreateConsumer, _: &mut Context<Self>) -> Self::Result {
+            match self.connection.as_ref().map(|c| c.create_channel()) {
+                Some(ch_fut) => Box::pin(
+                    async move {
+                        match ch_fut.await {
+                            Ok(channel) => {
+                                if let Err(err) = channel
+                                    .basic_qos(
+                                        msg.configuration.prefetch,
+                                        lapin::options::BasicQosOptions::default(),
+                                    )
+                                    .await
+                                {
+                                    {{ e::log(type = "error", options = options) }}("Connot set qos on the channel: {}", err);
+
+                                    return Err(err);
+                                }
+
+                                channel
+                                    .basic_consume(
+                                        msg.configuration.queue_name.as_str(),
+                                        format!(
+                                            "rust-actix-consumer {:?}",
+                                            std::thread::current().id()
+                                        )
+                                        .as_str(),
+                                        lapin::options::BasicConsumeOptions::default(),
+                                        amq_protocol_types::FieldTable::default(),
+                                    )
+                                    .await
+                            }
+                            Err(err) => {
+                                {{ e::log(type = "error", options = options) }}("Connot create channel: {}", err);
+
+                                Err(err)
+                            }
+                        }
+                    }
+                    .into_actor(self)
+                    .map(move |res, act, ctx| {
+                        res.map_err(|err| {
+                            if let Some(timeout) = act.backoff.next_backoff() {
+                                ctx.run_later(timeout, |_, ctx| ctx.stop());
+                            }
+
+                            return CreateConsumerError::Lapin(err);
+                        })
+                    }),
+                ),
+                None => {
+                    Box::pin(async move { Err(CreateConsumerError::NotReady) }.into_actor(self))
+                }
+            }
+        }
+    }
+
+    pub struct CreateChannel;
+
+    impl Message for CreateChannel {
+        type Result = Result<lapin::Channel, CreateChannelError>;
+    }
+
+    #[derive(Debug)]
+    pub enum CreateChannelError {
+        Lapin(lapin::Error),
+        NotReady,
+    }
+
+    impl Handler<CreateChannel> for RabbitmqManager {
+        type Result = ResponseActFuture<Self, Result<lapin::Channel, CreateChannelError>>;
+
+        fn handle(&mut self, _: CreateChannel, _: &mut Context<Self>) -> Self::Result {
+            match self.connection.as_ref().map(|c| c.create_channel()) {
+                Some(cr_fut) => Box::pin(
+                    async move {
+                        let ch = cr_fut.await.map_err(|err| err);
+                        match ch {
+                            Ok(ch) => {
+                                if let Err(err) =
+                                    ch.confirm_select(ConfirmSelectOptions::default()).await
+                                {
+                                    return Err(err);
+                                }
+                                Ok(ch)
+                            }
+                            Err(err) => Err(err),
+                        }
+                    }
+                    .into_actor(self)
+                    .map(move |res, act, ctx| {
+                        res.map_err(|err| {
+                            if let Some(timeout) = act.backoff.next_backoff() {
+                                ctx.run_later(timeout, |_, ctx| ctx.stop());
+                            }
+
+                            return CreateChannelError::Lapin(err);
+                        })
+                    }),
+                ),
+                None => Box::pin(async move { Err(CreateChannelError::NotReady) }.into_actor(self)),
+            }
+        }
+    }
+}
+
+pub mod producer {
+    use actix::*;
+    use backoff::backoff::Backoff;
+    use backoff::ExponentialBackoff;
+
+    use super::manager::RabbitmqManager;
+
+    {% if "tracing" in apm %}
+    use tracing::Span;
+    use tracing::Instrument;
+    {% if "opentelemetry" in apm %}
+    use opentelemetry::{propagation::TextMapPropagator, trace};
+    use opentelemetry::sdk::propagation::TraceContextPropagator;
+    use tracing_opentelemetry::OpenTelemetrySpanExt;
+    {% endif %}
+    {% endif %}
+
+    pub struct Producer {
+        manager: Addr<RabbitmqManager>,
+        backoff: ExponentialBackoff,
+        channel: Option<lapin::Channel>,
+        exchange: String,
+    }
+
+    impl Supervised for Producer {}
+
+    impl Producer {
+        pub fn start(manager: Addr<RabbitmqManager>, exchange: String) -> Addr<Self> {
+            let mut backoff = ExponentialBackoff::default();
+            backoff.max_elapsed_time = None;
+
+            Supervisor::start(|_| Self {
+                backoff,
+                manager,
+                exchange,
+                channel: None,
+            })
+        }
+    }
+
+    impl Actor for Producer {
+        type Context = Context<Self>;
+
+        fn started(&mut self, ctx: &mut Context<Self>) {
+            self.manager
+                .send(super::manager::CreateChannel)
+                .into_actor(self)
+                .map(|res, act, ctx| match res {
+                    Ok(res) => match res {
+                        Ok(channel) => {
+                            act.channel = Some(channel);
+                            act.backoff.reset();
+                        }
+                        Err(err) => {
+                            {{ e::log(type = "error", options = options) }}("Cannot create producer: {:?}", err);
+
+                            if let Some(timeout) = act.backoff.next_backoff() {
+                                ctx.run_later(timeout, |_, ctx| ctx.stop());
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        {{ e::log(type = "error", options = options) }}("Cannot create producer: {:?}", err);
+
+                        if let Some(timeout) = act.backoff.next_backoff() {
+                            ctx.run_later(timeout, |_, ctx| ctx.stop());
+                        }
+                    }
+                })
+                .wait(ctx);
+        }
+
+        fn stopped(&mut self, _: &mut Self::Context) {
+            self.channel.take();
+        }
+    }
+
+    pub struct Send<'a, T>
+    where
+        T: super::super::Message,
+    {
+        inner: T,
+        routing_key: &'a str,
+    }
+
+    impl<'a, T> Send<'a, T>
+    where
+        T: super::super::Message,
+    {
+        pub fn new(routing_key: &'a str, inner: T) -> Self {
+            Self { inner, routing_key }
+        }
+
+        pub fn take(self) -> (T, &'a str) {
+            (self.inner, self.routing_key)
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum SendError {
+        SerdeSerializationError,
+        NotReady,
+        Lapin(lapin::Error),
+    }
+
+    impl std::fmt::Display for SendError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Send error: {:?}", self)
+        }
+    }
+
+    impl std::error::Error for SendError {}
+
+    impl<'a, T> Message for Send<'a, T>
+    where
+        T: super::super::Message,
+    {
+        type Result = Result<bool, SendError>;
+    }
+
+    impl<'a, T> Handler<Send<'a, T>> for Producer
+    where
+        T: super::super::Message,
+    {
+        type Result = ResponseActFuture<Self, Result<bool, SendError>>;
+
+        fn handle(&mut self, msg: Send<T>, _: &mut Context<Self>) -> Self::Result {
+            let (d, routing_key) = msg.take();
+            let (meta, payload) = d.split();
+
+            {% if "tracing" in apm %}
+            let span = tracing::info_span!(
+                "producer",
+                otel.name = %format!("{} - {} send", self.exchange.as_str(), routing_key).as_str(),
+                otel.kind = "PRODUCER",
+                otel.status_code = tracing::field::Empty,
+                messaging.system = "rabbitmq",
+                messaging.destination = self.exchange.as_str(),
+                messaging.destination_kind = "exchange",
+                messaging.protocol = "AMQP",
+                messaging.protocol_version = "0.9.1",
+                messaging.operation = "send"
+            );
+            let _entered = span.enter();
+            {% endif %}
+
+            {% if "opentelemetry" in apm %}
+            let mut headers = meta.into();
+            add_trace_headers(&mut headers, &span);
+            {% endif %}
+
+            let props = lapin::BasicProperties::default().with_headers({% if "opentelemetry" in apm %}headers{% else %}meta.into(){% endif %});
+            let body = serde_json::json!(payload);
+            match serde_json::to_vec(&body) {
+                Ok(serialized) => {
+                    let confirm_fut = self.channel.as_ref().map(|s| {
+                        s.basic_publish(
+                            self.exchange.as_str(),
+                            routing_key,
+                            lapin::options::BasicPublishOptions::default(),
+                            serialized,
+                            props,
+                        )
+                    });
+
+                    match confirm_fut {
+                        Some(confirm_fut) => Box::pin(
+                            async move {
+                                match confirm_fut.await {
+                                    Ok(pub_confirm) => pub_confirm.await.map(|c| match c.is_ack() {
+                                        true => {
+                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Ok.as_str());{% endif %}
+                                            true
+                                        }
+                                        false => {
+                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Error.as_str());{% endif %}
+                                            false
+                                        }
+                                    }),
+                                    Err(err) => {
+                                        {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Error.as_str());{% endif %}
+                                        Err(err)
+                                    },
+                                }
+                            }
+                            {% if "tracing" in apm %}.instrument(tracing::info_span!("handler")){% endif %}
+                            .into_actor(self)
+                            .map(move |res, act, ctx| {
+                                res.map_err(|err| {
+                                    {{ e::log(type = "error", options = options) }}("An error occured during send: {}", err);
+
+                                    if let Some(timeout) = act.backoff.next_backoff() {
+                                        ctx.run_later(timeout, |_, ctx| ctx.stop());
+                                    }
+
+                                    return SendError::Lapin(err);
+                                })
+                            }),
+                        ),
+                        None => Box::pin(async move { Err(SendError::NotReady) }.into_actor(self)),
+                    }
+                }
+                Err(_) => Box::pin(
+                    async move { Err(SendError::SerdeSerializationError) }.into_actor(self),
+                ),
+            }
+        }
+    }
+
+    {% if "tracing" in apm %}
+    fn add_trace_headers(headers: &mut amq_protocol_types::FieldTable, span: &Span) {
+        let mut trace_headers = std::collections::HashMap::new();
+        TraceContextPropagator::new().inject_context(&span.context(), &mut trace_headers);
+
+        if let Some(value) = trace_headers.get("traceparent") {
+            headers.insert(
+                amq_protocol_types::ShortString::from("traceparent"),
+                amq_protocol_types::AMQPValue::from(amq_protocol_types::LongString::from(value.as_str())),
+            );
+        }
+
+        if let Some(value) = trace_headers.get("tracestate") {
+            headers.insert(
+                amq_protocol_types::ShortString::from("tracestate"),
+                amq_protocol_types::AMQPValue::from(amq_protocol_types::LongString::from(value.as_str())),
+            );
+        }
+    }
+    {% endif %}
+}
+
+pub mod consumer {
+    use std::collections::HashMap;
+    use std::pin::Pin;
+
+    use actix::*;
+    use amq_protocol_types::ShortUInt;
+    use backoff::backoff::Backoff;
+    use backoff::ExponentialBackoff;
+    use futures::Future;
+    use lapin::message::Delivery;
+
+    use super::manager::RabbitmqManager;
+
+    {% if "tracing" in apm %}
+    use tracing::Span;
+    use tracing::Instrument;
+    {% if "opentelemetry" in apm %}
+    use opentelemetry::trace;
+    {% endif %}
+    {% endif %}
+
+    #[derive(Clone)]
+    pub struct Configuration {
+        pub prefetch: ShortUInt,
+        pub queue_name: String,
+    }
+
+    #[derive(Debug)]
+    pub enum Confirmation {
+        Ack,
+        Nack,
+    }
+
+    impl<O, E> Into<Confirmation> for Result<O, E> where O: Into<Confirmation>, E: Into<Confirmation> {
+        fn into(self) -> Confirmation {
+            match self {
+                Err(e) => e.into(),
+                Ok(o) => o.into()
+            }
+        }
+    }
+
+    impl Into<Confirmation> for () {
+        fn into(self) -> Confirmation {
+            Confirmation::Ack
+        }
+    }
+
+    impl Configuration {
+        pub fn new(queue_name: &str) -> Self {
+            Self {
+                prefetch: 10,
+                queue_name: queue_name.to_string(),
+            }
+        }
+
+        pub fn with_prefetch(mut self, prefetch: ShortUInt) -> Self {
+            self.prefetch = prefetch;
+            self
+        }
+    }
+
+    pub struct Consumer<Dependencies>
+    where
+        Dependencies: Unpin + Clone + 'static,
+    {
+        dependencies: Dependencies,
+        configuration: Configuration,
+        manager: Addr<super::manager::RabbitmqManager>,
+        handlers: HashMap<String, Box<dyn Handler<Dependencies>>>,
+    }
+
+    impl<Dependencies> Consumer<Dependencies>
+    where
+        Dependencies: Unpin + Clone + 'static,
+    {
+        pub fn new(
+            manager: Addr<super::manager::RabbitmqManager>,
+            configuration: Configuration,
+            dependencies: Dependencies,
+        ) -> Self {
+            Self {
+                manager,
+                configuration,
+                dependencies,
+                handlers: HashMap::new(),
+            }
+        }
+
+        pub fn subscribe<T, M, Response>(mut self, handler: T) -> Self
+        where
+            T: Fn(M, Dependencies) -> Response + 'static,
+            M: super::super::MessageExtractor + 'static,
+            Response: Future + 'static,
+            Response::Output: Into<Confirmation>,
+        {
+            let msg_type = M::get_type();
+
+            if self.handlers.contains_key(&msg_type) {
+                panic!("Handler registered twice: {}", msg_type);
+            }
+
+            self.handlers
+                .insert(M::get_type(), Box::new(MessageHandler::new(handler)));
+            self
+        }
+
+        pub fn start(self) -> Addr<ConsumerHandle<Dependencies>> {
+            ConsumerHandle::start(
+                self.manager,
+                self.configuration,
+                self.handlers,
+                self.dependencies,
+            )
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum MessageReceiveError {
+        MissingHeaders,
+        Utf8PayloadError,
+        MessageExtractionFailed,
+    }
+
+    pub trait Handler<Deps> {
+        fn call(
+            &self,
+            deps: Deps,
+            delivery: lapin::message::Delivery,
+        ) -> Pin<Box<dyn Future<Output = ()>>>;
+    }
+
+    pub struct MessageHandler<T, Response, Deps>
+    where
+        T: super::super::MessageExtractor,
+        Response: Future,
+        Response::Output: Into<Confirmation>,
+        Deps: Unpin + Clone + 'static,
+    {
+        handler: Box<dyn Fn(T, Deps) -> Response>,
+    }
+
+    impl<T, Response, Deps> MessageHandler<T, Response, Deps>
+    where
+        T: super::super::MessageExtractor,
+        Response: Future,
+        Response::Output: Into<Confirmation>,
+        Deps: Unpin + Clone + 'static,
+    {
+        pub fn new<A: Fn(T, Deps) -> Response + 'static>(handler: A) -> Self {
+            Self {
+                handler: Box::new(handler),
+            }
+        }
+
+        fn extract<'a>(
+            &self,
+            delivery: &'a Delivery,
+        ) -> Result<T, MessageReceiveError> {
+            let headers = delivery
+                .properties
+                .headers()
+                .clone()
+                .ok_or(MessageReceiveError::MissingHeaders)?; // todo: try to get rid of this clone
+            
+            let data = std::str::from_utf8(&delivery.data)
+                .map_err(|_| MessageReceiveError::Utf8PayloadError)?;
+
+            T::extract(headers, data).ok_or_else(|| MessageReceiveError::MessageExtractionFailed)
+        }
+    }
+
+    impl<T, Response, Deps> Handler<Deps> for MessageHandler<T, Response, Deps>
+    where
+        T: super::super::MessageExtractor,
+        Response: Future + 'static,
+        Response::Output: Into<Confirmation>,
+        Deps: Unpin + Clone + 'static,
+    {
+        fn call(
+            &self,
+            deps: Deps,
+            delivery: Delivery,
+        ) -> Pin<Box<dyn Future<Output = ()>>> {
+            match self.extract(&delivery) {
+                Ok(t) => {
+                    let future = (self.handler)(t, deps);
+
+                    Box::pin(async move {
+                        if let Err(err) = match future.await.into() {
+                            Confirmation::Ack => {
+                                {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Ok.as_str());{% endif %}
+                                delivery
+                                    .ack(lapin::options::BasicAckOptions::default())
+                                    .await
+                            }
+                            Confirmation::Nack => {
+                                delivery
+                                    .nack(lapin::options::BasicNackOptions::default())
+                                    .await
+                            }
+                        } {
+                            {{ e::log(type = "error", options = options) }}("confirmation issue: {:?}", err);
+                        }
+                    })
+                }
+                Err(err) => {
+                    {{ e::log(type = "error", options = options) }}(
+                        "Cannot execute handler: {:?} (message acked)",
+                        err
+                    );
+                    
+                    Box::pin(async move {
+                        if let Err(err) = delivery
+                            .ack(lapin::options::BasicAckOptions::default())
+                            .await {
+                            {{ e::log(type = "error", options = options) }}("confirmation issue: {:?}", err);
+                        }
+                    })
+                }
+            }
+        }
+    }
+
+    pub struct ConsumerHandle<T>
+    where
+        T: Unpin + Clone + 'static,
+    {
+        manager: Addr<RabbitmqManager>,
+        backoff: ExponentialBackoff,
+        dependency: T,
+        handlers: std::collections::HashMap<String, Box<dyn Handler<T>>>,
+        configuration: Configuration,
+    }
+
+    impl<T> Supervised for ConsumerHandle<T> where T: Unpin + Clone + 'static {}
+
+    impl<T> ConsumerHandle<T>
+    where
+        T: Unpin + Clone + 'static,
+    {
+        // handlers
+        pub fn start(
+            manager: Addr<RabbitmqManager>,
+            configuration: Configuration,
+            handlers: std::collections::HashMap<String, Box<dyn Handler<T>>>,
+            dependency: T,
+        ) -> Addr<Self> {
+            let mut backoff = ExponentialBackoff::default();
+            backoff.max_elapsed_time = None;
+
+            Supervisor::start(|_| Self {
+                backoff,
+                manager,
+                dependency,
+                handlers,
+                configuration,
+            })
+        }
+    }
+
+    impl<T> StreamHandler<Result<(lapin::Channel, lapin::message::Delivery), lapin::Error>>
+        for ConsumerHandle<T>
+    where
+        T: Unpin + Clone + 'static,
+    {
+        fn handle(
+            &mut self,
+            item: Result<(lapin::Channel, lapin::message::Delivery), lapin::Error>,
+            ctx: &mut Self::Context,
+        ) {
+            match item {
+                Ok((_, delivery)) => {
+                    let handler = delivery
+                        .properties
+                        .headers()
+                        .as_ref()
+                        .and_then(|ft| ft.inner().get_key_value("type"))
+                        .and_then(|(_, value)| match value {
+                            amq_protocol_types::AMQPValue::LongString(val) => Some(val),
+                            _ => None,
+                        })
+                        .and_then(|type_header| self.handlers.get(type_header.as_str()));
+
+                    {% if "tracing" in apm %}
+                    let span = tracing::info_span!(
+                        "consumer",
+                        otel.name = %format!("{} process", self.configuration.queue_name.as_str()).as_str(),
+                        otel.kind = "CONSUMER",
+                        otel.status_code = tracing::field::Empty,
+                        messaging.system = "rabbitmq",
+                        messaging.destination = self.configuration.queue_name.as_str(),
+                        messaging.destination_kind = "queue",
+                        messaging.protocol = "AMQP",
+                        messaging.protocol_version = "0.9.1",
+                        messaging.operation = "receive",
+                        messaging.rabbitmq.routing_key = delivery.routing_key.as_str()
+                    );
+                    let _entered = span.enter();
+
+                    // todo: trace context
+                    {% endif %}
+
+                    match handler {
+                        Some(handler) => {
+                            let dependency = self.dependency.clone();
+
+                            handler.call(dependency, delivery){% if "tracing" in apm %}.instrument(tracing::info_span!("handler")){% endif %}.into_actor(self).spawn(ctx);
+                        }
+                        None => {
+                            {% if "tracing" in apm %}span.record("otel.status_code", &trace::StatusCode::Error.as_str());{% endif %}
+                            {{ e::log(type = "error", options = options) }}("Cannot find handler for message, missing correct type header (message acked)");
+
+                            async move {
+                                if let Err(err) = delivery
+                                    .ack(lapin::options::BasicAckOptions::default())
+                                    .await
+                                {
+                                    {{ e::log(type = "error", options = options) }}("Cannot ack message: {:?}", err);
+                                }
+                            }
+                            {% if "tracing" in apm %}.instrument(tracing::info_span!("handler.missing")){% endif %}
+                            .into_actor(self)
+                            .spawn(ctx);
+                        }
+                    }
+                }
+                Err(e) => {
+                    {{ e::log(type = "error", options = options) }}(
+                        "Critical error occured during message consumption: {}, restarting actor",
+                        e
+                    );
+                    ctx.stop();
+                }
+            }
+        }
+    }
+
+    impl<T> Actor for ConsumerHandle<T>
+    where
+        T: Unpin + Clone + 'static,
+    {
+        type Context = Context<Self>;
+
+        fn started(&mut self, ctx: &mut Context<Self>) {
+            self.manager
+                .send(super::manager::CreateConsumer {
+                    configuration: self.configuration.clone(),
+                })
+                .into_actor(self)
+                .map(|res, act, ctx| match res {
+                    Ok(res) => match res {
+                        Ok(channel) => {
+                            ctx.add_stream(channel);
+                            act.backoff.reset();
+                        }
+                        Err(err) => {
+                            {{ e::log(type = "error", options = options) }}("Cannot create consumer: {:?}", err);
+
+                            if let Some(timeout) = act.backoff.next_backoff() {
+                                ctx.run_later(timeout, |_, ctx| ctx.stop());
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        {{ e::log(type = "error", options = options) }}("Cannot create consumer: {:?}", err);
+
+                        if let Some(timeout) = act.backoff.next_backoff() {
+                            ctx.run_later(timeout, |_, ctx| ctx.stop());
+                        }
+                    }
+                })
+                .wait(ctx);
+        }
+    }
+}

@@ -1,0 +1,158 @@
+{% macro property_name(name) %}{% filter nospaces %}
+    {{ name | replace(from="-", to="") | snakecase }}
+    
+    {% if name | snakecase in [
+        "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", 
+        "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait", 
+        "true", "type", "unsafe", "use", "where", "while", "async", "await", "dyn",
+        "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
+        "unsized", "virtual", "yield", "try"
+    ] %}_{% endif %}
+{% endfilter %}{% endmacro property_name %}
+
+{% macro has_format(format, models) -%}
+{% for model in models | filter(attribute="object") -%}
+{% for property in model.object.properties -%}
+{% if property.validation and property.validation.format and property.validation.format == format %}1{% endif %}
+{%- endfor %}
+{%- endfor %}
+{%- endmacro has_format %}
+
+{% macro model_name(name) %}{% filter nospaces %}
+    {{ name  }}
+{% endfilter %}{% endmacro model_name %}
+
+{% macro to_string(q, required, name='') %}{% filter nospaces %}
+{% if name != "" %}
+{% set real_name = name -%}
+{% else %}
+{% set real_name = "self." | concat(with=self::property_name(name = q.name)) -%}
+{% endif %}
+{% if q.type == "enum" %}
+    {{ real_name }}.to_string()
+{% elif q.type == "string" %}
+    {{ real_name }}.clone()
+{% else %}
+    format!("{}", {{ real_name }})
+{% endif %}
+{% endfilter %}{% endmacro to_string %}
+
+{% macro to_str(q, name='') %}{% filter nospaces %}
+{% if name != "" %}
+{% set real_name = name -%}
+{% else %}
+{% set real_name = "self." | concat(with=self::property_name(name = q.name)) -%}
+{% endif %}
+{% if q.type == "enum" %}
+    {{ real_name }}.to_string().as_ref()
+{% elif q.type == "string" %}
+    {{ real_name }}.as_ref()
+{% else %}
+    format!("{}", {{ real_name }}).as_ref()
+{% endif %}
+{% endfilter %}{% endmacro to_str %}
+
+{% macro enum_variant(name, base) %}{% filter nospaces %}
+    {{ name | camelcase | capitalize | replace(from="-", to="") | when_numeric(prefix=base) }}
+{% endfilter %}{% endmacro enum_variant %}
+
+{% macro get_validation(validation) %}{% filter nospaces %}
+    {% if validation.format and validation.format == "decimal" %}{% else %}
+    {% if validation.format and validation.format == "date-time" %}regex="DATE_TIME", {% endif %}
+    {% if validation.maxLength %}length(max = {{ validation.maxLength }}), {% endif %}
+    {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
+    {% if validation.pattern %}regex="{{ validation.pattern.name | snakecase | upper }}", {% endif %}
+    {% if validation.minimum is defined or validation.maximum is defined %}
+    range(
+        {% if validation.minimum is defined %}min = {{ validation.minimum }}{% if validation.maximum is defined %}, {% endif %}{% endif %}
+        {% if validation.maximum is defined %}max = {{ validation.maximum }}{% endif %}
+    )
+    {% endif %}
+    {% endif %}
+{% endfilter %}{% endmacro get_validation %}
+
+{% macro type(property, ns="") %}{% filter nospaces %}
+{% if property.nullable %}Option<{% endif %}
+
+{# todo: model name cannot be one of json-schema types, infinite loop, check #}
+
+{% if property.validation and property.validation.format and property.validation.format == "decimal" %}
+    Decimal
+{% elif property.type == "string" %}
+    String
+{% elif property.type == "boolean" %}
+    bool
+{% elif property.type == "integer" %}
+    i32
+{% elif property.type == "number" %}
+    f32
+{% elif property.type == "any" %}
+    serde_json::Value
+{% elif property.type == "array" and property.model %}
+    Vec<{{ self::type(property = property.model, ns = ns) }}>
+{% elif property.type == "map" and property.model %}
+    HashMap<String, {{ self::type(property = property.model, ns = ns) }}>
+{% elif property.type == "object" and property.model %}
+    {% if ns %}{{ ns }}::{% endif %}{{ self::model_name(name = property.model.type) }}
+{% elif property.type == "wrapper" and property.model %}
+    {% if ns %}{{ ns }}::{% endif %}{{ self::model_name(name = property.model.name) }}
+{% elif property.type == "enum" and property.model %}
+    {% if ns %}{{ ns }}::{% endif %}{{ self::model_name(name = property.model.name) }}Variant
+{% endif %}
+
+{% if property.nullable %}>{% endif %}
+{% endfilter %}{% endmacro type %}
+
+{% macro do_not_modify() %}
+// 
+// This file is generated from openapi specification. Please do not modify it.
+// It should be .gitignored
+//
+{% endmacro do_not_modify %}
+
+{% macro get_auth_header(security) -%}
+{% if security.scheme == 'basic' %}Authorization{% else %}{{ security.name }}{% endif %}
+{%- endmacro get_auth_header %}
+
+{% macro endpoint_return(success, endpoint, options) -%}{% filter nospaces %}Result<
+    {% if success == "no-models" %}
+    {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
+    {% elif success.model %}
+    {{ self::type(property = success.model, ns = "model") }}
+    {% else %}
+    reqwest::Response
+    {% endif %},
+    {{ self::endpoint_error(endpoint = endpoint, options = options) }}
+>{% endfilter %}{%- endmacro skipped_headers %}
+
+{% macro endpoint_default_response(endpoint, options) -%}endpoint::{{ endpoint.operation | pascalcase }}Response{%- endmacro endpoint_default_response %}
+
+{% macro endpoint_error(endpoint, options) -%}{% filter nospaces %}
+{% if options.errorWrapperType %}{{ options.errorWrapperType }}{% else %}ClientError<{{ self::endpoint_error_body(endpoint = endpoint, options = options) }}>{% endif %}
+{% endfilter %}{%- endmacro skipped_headers %}
+
+{% macro endpoint_error_body(endpoint, options) -%}{% filter nospaces %}
+{% if options.globalError %}
+    {{ options.globalError }}
+{% else %}
+    endpoint::{{ endpoint.operation | pascalcase }}Error
+{% endif %}
+{% endfilter %}{%- endmacro skipped_headers %}
+
+{% macro endpoint_map_error(reqwest, endpoint, options) %}{% filter nospaces %}
+    ClientError::<{{ self::endpoint_error_body(endpoint = endpoint, options = options) }}>::from_reqwest({{ reqwest }})
+{% endfilter %}{% endmacro endpoint_map_error %}
+
+{% macro endpoint_handle_error(response, endpoint, options) %}{% filter nospaces %}
+    ClientError::<{{ self::endpoint_error_body(endpoint = endpoint, options = options) }}>::from_response({{ response }}).await
+{% endfilter %}{% endmacro endpoint_handle_error %}
+
+{% macro model_to_string(name, property) %}{% filter nospaces %}
+{% if property.type == "enum" %}
+{{ name }}.to_string()
+{% elif property.type == "string" %}
+{{ name }}
+{% else %}
+/* todo */
+{% endif %}
+{% endfilter %}{% endmacro model_to_string %}

@@ -1,0 +1,160 @@
+{# type=tags,filename=api/service.rs,min_version=0.2.0 #}
+{%- import "macros.j2" as m -%}
+{%- import "extra.j2" as e -%}
+{{ m::do_not_modify() }}
+use actix_web::web;
+use futures::{Future, future::LocalBoxFuture};
+use std::marker::PhantomData;
+
+{% for tag in tags %}
+
+{% for endpoint in tag.endpoints %}
+struct {{ endpoint.operation | pascalcase }}Service<
+	{{ endpoint.operation | pascalcase }},
+	{{ endpoint.operation | pascalcase }}Response,
+	Dependencies
+> where
+		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
+		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
+        Dependencies: actix_web::FromRequest + 'static {
+	handler: {{ endpoint.operation | pascalcase }},
+	_pd: PhantomData<{{ endpoint.operation | pascalcase }}Response>,
+	_pdd: PhantomData<Dependencies>
+}
+
+impl<
+	{{ endpoint.operation | pascalcase }},
+	{{ endpoint.operation | pascalcase }}Response,
+	Dependencies
+> {{ endpoint.operation | pascalcase }}Service<
+	{{ endpoint.operation | pascalcase }},
+	{{ endpoint.operation | pascalcase }}Response,
+	Dependencies
+> where
+		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
+		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
+        Dependencies: actix_web::FromRequest + 'static {
+	pub fn new(handler: {{ endpoint.operation | pascalcase }}) -> Self {
+		Self {
+			handler,
+			_pd: PhantomData,
+			_pdd: PhantomData,
+		}
+	}
+}
+
+impl<
+	{{ endpoint.operation | pascalcase }},
+	{{ endpoint.operation | pascalcase }}Response,
+	Dependencies
+> actix_web::dev::Service<actix_web::dev::ServiceRequest> for {{ endpoint.operation | pascalcase }}Service<
+	{{ endpoint.operation | pascalcase }},
+	{{ endpoint.operation | pascalcase }}Response,
+	Dependencies
+> where
+		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
+		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
+        Dependencies: actix_web::FromRequest + 'static {
+	type Response = actix_web::dev::ServiceResponse;
+    type Error = std::convert::Infallible;
+    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    actix_web::dev::always_ready!();
+
+    fn call(&self, req: actix_web::dev::ServiceRequest) -> Self::Future {
+		let (req, {% if endpoint.requestbody.models.default -%}mut payload{% else %}_{% endif %}) = req.into_parts();
+
+        let handle = self.handler.clone(); // todo: why clone
+        Box::pin(async move {
+            let deps = async {
+                Dependencies::extract(&req).await.map_err(|e| e.into())
+            }; 
+
+			{% set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody.models.default %}
+
+			{% if extra %}
+			{% if endpoint.parameters.path | length > 0 %}
+			let path = <web::Path::<super::endpoint::{{ endpoint.operation | pascalcase }}Path> as actix_web::FromRequest>::extract(&req);
+			{% endif %}
+
+			{% if endpoint.parameters.query | length > 0 %}
+			let query = <web::Query::<super::endpoint::{{ endpoint.operation | pascalcase }}Query> as actix_web::FromRequest>::extract(&req);
+			{% endif %}
+
+			{% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+			{% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
+			{%- if filtered_headers | length > 0 %}
+			let headers = <super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders as actix_web::FromRequest>::extract(&req);
+			{% endif %}
+
+			{% if endpoint.requestbody.models.default -%}
+			let body = <web::Json::<super::model::{{ self::model_name(name = endpoint.requestbody.models.default.model.model.name) }}> as actix_web::FromRequest>::from_request(&req, &mut payload);
+			{% endif %}
+
+            let extract = futures::try_join!({% if endpoint.requestbody.models.default %}body, {% endif %}{% if endpoint.parameters.path | length > 0 %}path, {% endif %}{% if endpoint.parameters.query | length > 0 %}query, {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps);
+            let res = match extract {
+                Err(err) => {
+                    actix_web::HttpResponse::from_error(err)
+                },
+                Ok(({% if endpoint.requestbody.models.default %}body, {% endif %}{% if endpoint.parameters.path | length > 0 %}path, {% endif %}{% if endpoint.parameters.query | length > 0 %}query, {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps)) => {
+                    let response = handle({% if endpoint.requestbody.models.default %}body.into_inner(), {% endif %}{% if endpoint.parameters.path | length > 0 %}path.into_inner(), {% endif %}{% if endpoint.parameters.query | length > 0 %}query.into_inner(), {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps).await;
+
+					let body: super::endpoint::{{ endpoint.operation | pascalcase }}Response = response.into();
+                    actix_web::HttpResponse::from(body)
+                }
+            };
+			{% else %}
+			let res = match deps.await {
+                Err(err) => {
+                    actix_web::HttpResponse::from_error(err)
+                },
+                Ok(deps) => {
+                    let response = handle(deps).await;
+
+					let body: super::endpoint::{{ endpoint.operation | pascalcase }}Response = response.into();
+                    actix_web::HttpResponse::from(body)
+                }
+            };
+			{% endif %}
+
+            Ok(actix_web::dev::ServiceResponse::new(req, res))
+		})
+	}
+}
+{% endfor %}
+
+pub fn configure_{{ tag.tag | snakecase }}<
+	{% for endpoint in tag.endpoints %}
+	{{ endpoint.operation | pascalcase }},
+	{{ endpoint.operation | pascalcase }}Response,
+	{% endfor %}
+	Dependencies
+>(
+	{% for endpoint in tag.endpoints %}
+	{{ endpoint.operation | snakecase }}: {{ endpoint.operation | pascalcase }},
+	{%- endfor %}
+) -> impl Fn(&mut web::ServiceConfig)
+    where
+		{% for endpoint in tag.endpoints %}
+		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
+		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
+		{%- endfor %}
+        Dependencies: actix_web::FromRequest + 'static,
+{
+    move |cfg: &mut web::ServiceConfig| {
+        cfg
+			{% for endpoint in tag.endpoints %}
+			.route(
+				"{{ endpoint.path }}",
+				web::{{ endpoint.method }}().service(actix_web::dev::fn_factory(move || async move { Ok({{ endpoint.operation | pascalcase }}Service::new({{ endpoint.operation | snakecase }})) }))
+			)
+			{% endfor %}
+			
+		;
+    }
+}
+{% endfor %}

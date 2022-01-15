@@ -1,0 +1,7 @@
+dependencies
+src/api
+src/client/devices
+src/client/error.rs
+src/rabbitmq
+spec/publish
+target/
