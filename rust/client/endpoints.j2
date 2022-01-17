@@ -87,6 +87,7 @@ impl {{ endpoint.operation | pascalcase }}Response{
 {% endif %}
 
 {%- if endpoint.parameters.query | length > 0 %}
+{% if endpoint.parameters.query | filter(attribute="required", value=true) | length == 0 %}#[derive(Default)]{% endif %}
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{%- for q in endpoint.parameters.query %}
 	pub {{ m::property_name(name = q.name) }}: {% if not q.required %}Option<{% endif %}{% if q.model %}{{ m::type(property = q.model, ns = "super::model") }}{% elif q.model.enum %}{{ m::type(property = q.model.enum, ns = "super::model") }}{% endif %}{% if not q.required %}>{% endif %},

@@ -135,10 +135,7 @@ mod tests {
         .with_auth_basic_auth("testing");
 
         let result = client.devices_list_v1(
-            client::devices::endpoint::DevicesListV1Query{
-                filter: None,
-                sort: None,
-            }
+            client::devices::endpoint::DevicesListV1Query::default()
         ).await;
 
         assert_eq!(result.is_err(), false);

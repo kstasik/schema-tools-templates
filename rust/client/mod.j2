@@ -122,21 +122,21 @@ impl {{ options.name }} {
 
         {{ e::endpoint_block(endpoint=endpoint, options=options) }}
         
-        let response = {% if "tracing" in apm %}async move { {% endif %}
+        let response = {% if "tracing" in apm %}async move { {%- endif %}
             request
-                {%- if endpoint.parameters.query | length > 0 %} 
+                {%- if endpoint.parameters.query | length > 0 %}
                 .query(&query.into_vec())
                 {% endif %}
                 {%- if endpoint.requestbody.models.default %}.json(&body){% endif -%}
                 .headers(
-                    final_headers 
+                    final_headers
                         .iter()
                         .cloned()
                         .collect()
                 )
                 .send()
                 .await
-                {% if "opentelemetry" in apm %}
+                {%- if "opentelemetry" in apm %}
                 .map(|res| {
                     let code = res.status().as_u16();
 
@@ -145,15 +145,15 @@ impl {{ options.name }} {
                     if code >= 400 {
                         tracing::error!("HTTP Response status code: {}", code);
                     }
-                    
+
                     res
                 })
-                {% endif %}
+                {%- endif %}
                 .map_err(|e| {
                     {% if "tracing" in apm %}tracing::error!("reqwest failed(): {}", e);{% endif %}
                     {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }}
                 })
-        {% if "tracing" in apm %}
+        {% if "tracing" in apm -%}
         }
         .instrument(span)
         .await{% endif %}?;
