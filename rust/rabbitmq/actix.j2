@@ -265,18 +265,19 @@ pub mod producer {
     {
         inner: T,
         routing_key: &'a str,
+        {% if "tracing" in apm %}span: Span,{% endif %}
     }
 
     impl<'a, T> Send<'a, T>
     where
         T: super::super::Message,
     {
-        pub fn new(routing_key: &'a str, inner: T) -> Self {
-            Self { inner, routing_key }
+        pub fn new(routing_key: &'a str, inner: T{% if "tracing" in apm %}, span: Span{% endif %}) -> Self {
+            Self { inner, routing_key, span }
         }
 
-        pub fn take(self) -> (T, &'a str) {
-            (self.inner, self.routing_key)
+        pub fn take(self) -> (T, &'a str{% if "tracing" in apm %}, Span{% endif %}) {
+            (self.inner, self.routing_key{% if "tracing" in apm %}, self.span{% endif %})
         }
     }
 
@@ -309,10 +310,12 @@ pub mod producer {
         type Result = ResponseActFuture<Self, Result<bool, SendError>>;
 
         fn handle(&mut self, msg: Send<T>, _: &mut Context<Self>) -> Self::Result {
-            let (d, routing_key) = msg.take();
+            let (d, routing_key{% if "tracing" in apm %}, parent_span{% endif %}) = msg.take();
             let (meta, payload) = d.split();
 
             {% if "tracing" in apm %}
+            let _entered = parent_span.enter();
+
             let span = tracing::info_span!(
                 "producer",
                 otel.name = %format!("{} - {} send", self.exchange.as_str(), routing_key).as_str(),

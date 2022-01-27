@@ -1,0 +1,69 @@
+{# type=static,filename=api/qs.rs,min_version=0.2.0,if=%options.qs%:serde_qs #}
+{%- import "extra.j2" as e -%}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
+use std::sync::Arc;
+
+use actix_web::{FromRequest, Error, web::{QueryConfig}, HttpRequest, error::QueryPayloadError};
+use serde::de;
+use actix_utils::future::{err, ok, Ready};
+
+pub struct QsQuery<T>(T);
+
+impl<T> QsQuery<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> FromRequest for QsQuery<T>
+where
+    T: de::DeserializeOwned,
+{
+    type Error = Error;
+    type Future = Ready<Result<Self, Error>>;
+
+    #[inline]
+    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let error_handler = req
+            .app_data::<QsQueryConfig>()
+            .and_then(|c| c.err_handler.clone());
+
+        serde_qs::from_str::<T>(req.query_string())
+            .map(|val| ok(QsQuery(val)))
+            .unwrap_or_else(move |e| {
+                let e = QueryPayloadError::Deserialize(de::Error::custom(e));
+
+                log::debug!(
+                    "Failed during Query extractor deserialization. \
+                     Request path: {:?}",
+                    req.path()
+                );
+
+                let e = if let Some(error_handler) = error_handler {
+                    (error_handler)(e, req)
+                } else {
+                    e.into()
+                };
+
+                err(e)
+            })
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct QsQueryConfig {
+    err_handler: Option<Arc<dyn Fn(QueryPayloadError, &HttpRequest) -> Error + Send + Sync>>,
+}
+
+impl QsQueryConfig {
+    /// Set custom error handler
+    pub fn error_handler<F>(mut self, f: F) -> Self
+    where
+        F: Fn(QueryPayloadError, &HttpRequest) -> Error + Send + Sync + 'static,
+    {
+        self.err_handler = Some(Arc::new(f));
+        self
+    }
+}
+

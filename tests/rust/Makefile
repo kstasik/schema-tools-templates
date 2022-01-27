@@ -2,7 +2,7 @@
 
 API_VERSION := $(shell cat spec/api/api.yaml | grep '^  version' | cut -d' ' -f4)
 
-SCHEMATOOLS_VERSION := v0.3.0
+SCHEMATOOLS_VERSION := v0.4.0
 SCHEMATOOLS_BIN = dependencies/schematools-$(SCHEMATOOLS_VERSION)
 FORMAT = 
 SCHEMATOOLS_PLATFORM = 
@@ -22,14 +22,15 @@ codegen: install-dependencies format
 	@echo generating code ...
 
 	$(SCHEMATOOLS_BIN) chain -vvvv \
+		-c 'registry add templates ../../' \
 		-c 'process dereference spec/message/all.yaml --skip-root-internal-references --create-internal-references' \
-		-c 'codegen json-schema - --template ../../rust/_common/ --template ../../rust/rabbitmq/ -o apm=tracing-opentelemetry -o "log=log" -o "client=actix" ${FORMAT} --target-dir src/' \
+		-c 'codegen json-schema - --template templates::rust/_common/ --template templates::rust/rabbitmq/ -o apm=tracing-opentelemetry -o "log=log" -o "client=actix" ${FORMAT} --target-dir src/' \
 		\
 		-c 'process dereference spec/api/api.yaml --skip-root-internal-references --create-internal-references' \
 		-c 'process merge-all-of - --leave-invalid-properties --filter "x-skip!=true"' \
 		-c 'process name - --overwrite --resource-method-version' \
-		-c 'codegen openapi - --template ../../rust/_common/ --template ../../rust/server-actix/ ${FORMAT} --target-dir src/' \
-		-c 'codegen openapi - --template ../../rust/_common/ --template ../../rust/client/ --format "rustfmt --edition 2021" --target-dir src/client/ -o apm=tracing-opentelemetry -o namespace=devices -o name=DevicesClient'
+		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/server-actix/ ${FORMAT} --target-dir src/ -o qs=serde_qs' \
+		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/client/ --format "rustfmt --edition 2021" --target-dir src/client/ -o qs=serde_qs -o apm=tracing-opentelemetry -o namespace=devices -o name=DevicesClient'
  
 install-dependencies: platform
 	@echo installing dependencies ...

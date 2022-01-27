@@ -26,7 +26,10 @@ pub struct {{ endpoint.operation | pascalcase }}Path{
 {% endif -%}
 
 {%- if endpoint.parameters.query | length > 0 %}
-#[derive(Deserialize)]
+{% set object_query_params = endpoint.parameters.query | filter(attribute="model.type", value="object") | length == 0 %}
+{% set object_all_optional = endpoint.parameters.query | filter(attribute="required", value=true) | length == 0 %}
+
+#[derive(Deserialize{% if object_all_optional %},Default{% endif %})]
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{% for param in endpoint.parameters.query %}
 	{% if param.style == 'form' and param.explode == false %}
@@ -128,18 +131,22 @@ impl<O, E> From<Result<O, E>> for {{ endpoint.operation | pascalcase }}Response 
 {% if froms is not containing(response.models.default.model.model.name) %}
 impl From<{% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}> for HttpResponse {
     fn from(d: {% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}) -> HttpResponse {
-        let mut builder = HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap())
-                {% for param in filtered_response_headers | filter(attribute="required", value=true) %}
-                .append_header((HeaderName::from_static("{{ param.name }}"), d.headers.{{ m::property_name(name = param.name) }}))
-                {% endfor %};
+        let mut builder = HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap());
 
-            {% for param in filtered_response_headers | filter(attribute="required", value=false)  %}
-            if let Some(header) = d.headers.{{ m::property_name(name = param.name) }} {
-                builder.append_header((HeaderName::from_static("{{ param.name }}"), header));
-            }
-            {% endfor %}
-        
-            builder.json({% if filtered_response_headers | length == 0 %}d{% else %}d.body{% endif %})
+        {% if filtered_response_headers | filter(attribute="required", value=true) | length > 0 %}
+        builder
+            {% for param in filtered_response_headers | filter(attribute="required", value=true) %}
+            .append_header((HeaderName::from_static("{{ param.name }}"), d.headers.{{ m::property_name(name = param.name) }}))
+            {% endfor %};
+        {% endif %}
+
+        {% for param in filtered_response_headers | filter(attribute="required", value=false)  %}
+        if let Some(header) = d.headers.{{ m::property_name(name = param.name) }} {
+            builder.append_header((HeaderName::from_static("{{ param.name }}"), header));
+        }
+        {% endfor %}
+    
+        builder.json({% if filtered_response_headers | length == 0 %}d{% else %}d.body{% endif %})
     }
 }
 

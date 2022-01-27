@@ -10,6 +10,8 @@ log = "0.4"
 env_logger = "0.8"
 futures-core = "0.3"
 futures = "0.3"
+serde_qs = "0.8.5"
+actix-utils = "3.0.0"
 
 # server
 serde = "1.0.130"
