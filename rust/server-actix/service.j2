@@ -5,6 +5,7 @@
 use actix_web::web;
 use futures::{Future, future::LocalBoxFuture};
 use std::marker::PhantomData;
+{% set_global qs = options.qs | default(value = "serde_urlencoded") %}
 
 {% for tag in tags %}
 
@@ -81,7 +82,8 @@ impl<
 			{% endif %}
 
 			{% if endpoint.parameters.query | length > 0 %}
-			let query = <web::Query::<super::endpoint::{{ endpoint.operation | pascalcase }}Query> as actix_web::FromRequest>::extract(&req);
+			{% if qs == "serde_qs" %}// todo: migrate to QsQuery once actix 4 becomes stable, https://github.com/samscott89/serde_qs/pull/48{% endif %}
+			let query = <{% if qs == "serde_qs" %}super::qs::QsQuery{% else %}web::Query{% endif %}::<super::endpoint::{{ endpoint.operation | pascalcase }}Query> as actix_web::FromRequest>::extract(&req);
 			{% endif %}
 
 			{% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}

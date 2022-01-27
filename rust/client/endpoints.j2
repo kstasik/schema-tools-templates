@@ -2,7 +2,7 @@
 {%- import "macros.j2" as m -%}
 {% import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
-use serde::{de::{self, IntoDeserializer}, Deserialize};
+use serde::{de::{self, IntoDeserializer}, Deserialize, Serialize};
 use std::fmt;
 use reqwest::header::{HeaderName, HeaderValue};
 use super::{ClientError, ApiError};
@@ -87,44 +87,12 @@ impl {{ endpoint.operation | pascalcase }}Response{
 {% endif %}
 
 {%- if endpoint.parameters.query | length > 0 %}
-{% if endpoint.parameters.query | filter(attribute="required", value=true) | length == 0 %}#[derive(Default)]{% endif %}
+#[derive(Serialize, Deserialize, {% if endpoint.parameters.query | filter(attribute="required", value=true) | length == 0 %}Default{% endif %})]
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{%- for q in endpoint.parameters.query %}
 	pub {{ m::property_name(name = q.name) }}: {% if not q.required %}Option<{% endif %}{% if q.model %}{{ m::type(property = q.model, ns = "super::model") }}{% elif q.model.enum %}{{ m::type(property = q.model.enum, ns = "super::model") }}{% endif %}{% if not q.required %}>{% endif %},
 	{% endfor -%}
 }
-
-impl {{ endpoint.operation | pascalcase }}Query {
-	pub fn into_vec(self) -> Vec<(String, String)> {
-		let mut parameters = vec![
-			{%- for q in endpoint.parameters.query | filter(attribute="required", value=true) | filter_not(attribute="style", value="deepObject") %}
-			(
-				"{{ q.name }}".to_string(),
-				self.{{ m::to_string(q = q.model, required = true, name = m::property_name(name = q.name)) }}
-			),
-			{% endfor -%}
-		];
-
-		{%- for q in endpoint.parameters.query | filter(attribute="required", value=false) | filter_not(attribute="style", value="deepObject") %}
-		if let Some(param) = self.{{ m::property_name(name = q.name) }} {
-			parameters.push(("{{ q.name }}".to_string(), {{ m::to_string(q = q.model, required = q.model.required, name = 'param') }}));
-		}
-		{%- endfor -%}
-
-		{%- for q in endpoint.parameters.query | filter(attribute="style", value="deepObject") %}
-		{%- if q.required %}
-		parameters.append(&mut self.{{ m::property_name(name = q.name) }}.to_parameters("{{ q.name }}"));
-		{% else %}
-		if let Some(param) = self.{{ m::property_name(name = q.name) }} {
-			parameters.append(&mut param.to_parameters("{{ q.name }}"));
-		}
-		{%- endif %}
-		{%- endfor %}
-
-		parameters
-	}
-}
-
 {% endif %}
 {% endfor %}
 {% endfor %}

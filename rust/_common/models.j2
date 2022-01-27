@@ -55,36 +55,6 @@ impl {{ m::model_name(name = model.object.name) }} { {# if sort required first #
         {% endif %}
     }
     {% endfor %}
-
-    {%- if model.spaces is containing("Parameter") %}
-    pub fn to_parameters(&self, attribute: &str) -> Vec<(String, String)> {
-        let mut parameters: Vec<(String, String)> = vec![];
-        
-        {% for property in filtered_properties -%}
-        {% if not property.required %}
-        if let Some(param) = &self.{{ m::property_name(name = property.name) }} {
-            {% if property.type == "array" %}
-            for val in param.iter() {
-                parameters.push((format!("{}[{{ property.name }}][]", attribute).to_string(), {{ m::to_string(q = property.model, required = property.model.required, name = 'val') }}));
-            }
-            {% else %}
-            parameters.push((format!("{}[{{ property.name }}]", attribute).to_string(), {{ m::to_string(q = property, required = property.required, name = 'param') }}));
-            {% endif %}
-        }
-        {% else %}
-        {% if property.type == "array" %}
-        for val in self.{{ m::property_name(name = property.name) }}.iter() {
-            parameters.push((format!("{}[{{ property.name }}][]", attribute).to_string(), {{ m::to_string(q = property.model, required = property.model.required, name = 'val') }}));
-        }
-        {% else %}
-        parameters.push((format!("{}[{{ property.name }}]", attribute).to_string(), {{ m::to_string(q = property, required = property.required) }}));
-        {% endif %}
-        {% endif %}
-        {% endfor %}
-
-        parameters
-    }
-    {%- endif %}
 }
 
 {{ e::model_object_impl(model = model, options = options) }}

@@ -26,7 +26,10 @@ pub struct {{ endpoint.operation | pascalcase }}Path{
 {% endif -%}
 
 {%- if endpoint.parameters.query | length > 0 %}
-#[derive(Deserialize)]
+{% set object_query_params = endpoint.parameters.query | filter(attribute="model.type", value="object") | length == 0 %}
+{% set object_all_optional = endpoint.parameters.query | filter(attribute="required", value=true) | length == 0 %}
+
+#[derive(Deserialize{% if object_all_optional %},Default{% endif %})]
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{% for param in endpoint.parameters.query %}
 	{% if param.style == 'form' and param.explode == false %}

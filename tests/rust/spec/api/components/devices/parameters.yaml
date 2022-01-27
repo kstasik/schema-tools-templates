@@ -37,6 +37,16 @@ listDevicesSortQuery:
     additionalProperties: false
     properties:
       deviceId:
+        type: string
         enum: ['asc', 'desc']
       remoteId:
+        type: string
         enum: ['asc', 'desc']
+
+listDevicesPageQuery:
+  name: page
+  description: Page of results
+  in: query
+  required: false
+  schema:
+    type: number

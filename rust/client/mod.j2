@@ -3,9 +3,9 @@
 {% import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
 {% set_global apm = options.apm | default(value = []) %}
+{% set_global qs = options.qs | default(value = "serde_urlencoded") %}
 
 {% set allowed_operations = e::allowed_operations(endpoints=endpoints, options=options) | split(pat=" ") %}
-{% set opentelemetry = options.opentelemetry | default(value=false) %}
 {% set filtered_endpoints = endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
 
 use std::collections::HashMap;
@@ -123,9 +123,9 @@ impl {{ options.name }} {
         {{ e::endpoint_block(endpoint=endpoint, options=options) }}
         
         let response = {% if "tracing" in apm %}async move { {%- endif %}
-            request
-                {%- if endpoint.parameters.query | length > 0 %}
-                .query(&query.into_vec())
+            {% if qs == "serde_qs" %}let{%- if endpoint.parameters.query | length > 0 %} mut{% endif %} req = {% endif %}request
+                {%- if endpoint.parameters.query | length > 0 and qs == "urlencoded" %}
+                .query(&query)
                 {% endif %}
                 {%- if endpoint.requestbody.models.default %}.json(&body){% endif -%}
                 .headers(
@@ -134,7 +134,17 @@ impl {{ options.name }} {
                         .cloned()
                         .collect()
                 )
-                .send()
+                {% if qs == "serde_qs" %}.build().map_err(|e| {
+                    {% if "tracing" in apm %}tracing::error!("reqwest failed(): {}", e);{% endif %}
+                    {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }}
+                })?;
+
+            {%- if endpoint.parameters.query | length > 0 %} 
+            let qs = serde_qs::to_string(&query).unwrap();
+            req.url_mut().set_query(Some(&qs));
+            {% endif %}
+            
+            self.client.execute(req){% else %}.send(){% endif %}
                 .await
                 {%- if "opentelemetry" in apm %}
                 .map(|res| {
