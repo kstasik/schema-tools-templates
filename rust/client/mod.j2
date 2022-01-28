@@ -139,11 +139,11 @@ impl {{ options.name }} {
                     {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }}
                 })?;
 
-            {%- if endpoint.parameters.query | length > 0 %} 
+            {%- if endpoint.parameters.query | length > 0 %}
             let qs = serde_qs::to_string(&query).unwrap();
             req.url_mut().set_query(Some(&qs));
-            {% endif %}
-            
+            {%- endif %}
+
             self.client.execute(req){% else %}.send(){% endif %}
                 .await
                 {%- if "opentelemetry" in apm %}
