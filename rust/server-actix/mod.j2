@@ -8,7 +8,7 @@ pub mod endpoint;
 pub mod model;
 #[allow(dead_code, unused_imports)]
 pub mod service;
-{% if options.qs == "serde_qs" %}
+{% if options.qs | default(value = "serde_urlencoded") == "serde_qs" %}
 #[allow(dead_code, unused_imports)]
 pub mod qs;
 {% endif %}
