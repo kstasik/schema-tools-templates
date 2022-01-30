@@ -82,10 +82,12 @@
     String
 {% elif property.type == "boolean" %}
     bool
+{% elif property.type == "integer" and property.validation.minimum | default(value = -1) >= 0 %}
+    u64
 {% elif property.type == "integer" %}
-    i32
+    i64
 {% elif property.type == "number" %}
-    f32
+    f64
 {% elif property.type == "any" %}
     serde_json::Value
 {% elif property.type == "array" and property.model %}

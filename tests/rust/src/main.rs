@@ -59,8 +59,7 @@ mod handler {
                 )],
             });
         }
-        // todo:: integer type
-        else if query.page.unwrap_or(0.00) == 2.0 {
+        else if query.page.unwrap_or(0) == 2 {
             return Ok(api::model::ListDevices200Response {
                 data: vec![api::model::Device::new(
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
@@ -190,7 +189,7 @@ mod tests {
             })
             .await;
 
-        assert_eq!(result.is_err(), false);
+        assert_eq!(result.is_err(), false); 
         assert_eq!(
             result.unwrap().data.get(0).unwrap().device_id,
             "a9604d6a-3f76-476b-bfbf-97a940e879d8"
@@ -208,7 +207,7 @@ mod tests {
 
         let result = client
             .devices_list_v1(client::devices::endpoint::DevicesListV1Query {
-                page: Some(2.0),
+                page: Some(2),
                 ..Default::default()
             })
             .await;
