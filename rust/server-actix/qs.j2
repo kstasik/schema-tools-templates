@@ -34,7 +34,7 @@ where
             .unwrap_or_else(move |e| {
                 let e = QueryPayloadError::Deserialize(de::Error::custom(e));
 
-                log::debug!(
+                {{ e::log(type = "debug", options = options) }}(
                     "Failed during Query extractor deserialization. \
                      Request path: {:?}",
                     req.path()
