@@ -49,4 +49,5 @@ listDevicesPageQuery:
   in: query
   required: false
   schema:
-    type: number
+    type: integer
+    minimum: 0
