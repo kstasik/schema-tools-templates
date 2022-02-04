@@ -51,3 +51,11 @@ listDevicesPageQuery:
   schema:
     type: integer
     minimum: 0
+
+listDevicesForQuery:
+  name: for
+  description: Test of reserved word in most languages
+  in: query
+  required: false
+  schema:
+    type: string

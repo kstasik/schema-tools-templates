@@ -41,6 +41,15 @@ mod handler {
     ) -> Result<api::model::ListDevices200Response, api::model::ListDevices400Response> {
         let _result = db.get_smth().await;
 
+        if query.for_.map(|f| f.eq("test")).unwrap_or(false) {
+            return Ok(api::model::ListDevices200Response {
+                data: vec![api::model::Device::new(
+                    "3801deea-8a6d-46cc-bc60-1e8ead00b0db".to_string(),
+                    api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
+                )],
+            });
+        }
+
         if query
             .filter
             .as_ref()
@@ -58,8 +67,7 @@ mod handler {
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                 )],
             });
-        }
-        else if query.page.unwrap_or(0) == 2 {
+        } else if query.page.unwrap_or(0) == 2 {
             return Ok(api::model::ListDevices200Response {
                 data: vec![api::model::Device::new(
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
@@ -189,7 +197,7 @@ mod tests {
             })
             .await;
 
-        assert_eq!(result.is_err(), false); 
+        assert_eq!(result.is_err(), false);
         assert_eq!(
             result.unwrap().data.get(0).unwrap().device_id,
             "a9604d6a-3f76-476b-bfbf-97a940e879d8"
@@ -216,6 +224,29 @@ mod tests {
         assert_eq!(
             result.unwrap().data.get(0).unwrap().device_id,
             "138f5d31-4feb-4765-88ad-989dff706b53"
+        );
+    }
+
+    #[actix_web::test]
+    async fn test_devices_list_v1_qs_reserved_word() {
+        let uri = run_server(web::Data::new(Database {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
+            .with_auth_basic_auth("testing");
+
+        let result = client
+            .devices_list_v1(client::devices::endpoint::DevicesListV1Query {
+                for_: Some("test".to_string()),
+                ..Default::default()
+            })
+            .await;
+
+        assert_eq!(result.is_err(), false);
+        assert_eq!(
+            result.unwrap().data.get(0).unwrap().device_id,
+            "3801deea-8a6d-46cc-bc60-1e8ead00b0db"
         );
     }
 
