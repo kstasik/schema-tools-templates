@@ -70,6 +70,8 @@ components:
       $ref: components/devices/parameters.yaml#/listDevicesSortQuery
     listDevicesPageQuery:
       $ref: components/devices/parameters.yaml#/listDevicesPageQuery
+    listDevicesForQuery:
+      $ref: components/devices/parameters.yaml#/listDevicesForQuery
     deviceIdPath:
       $ref: components/devices/parameters.yaml#/deviceIdPath
 
@@ -127,6 +129,7 @@ paths:
         - $ref: '#/components/parameters/listDevicesFilterQuery'
         - $ref: '#/components/parameters/listDevicesSortQuery'
         - $ref: '#/components/parameters/listDevicesPageQuery'
+        - $ref: '#/components/parameters/listDevicesForQuery'
     post:
       tags:
         - devices

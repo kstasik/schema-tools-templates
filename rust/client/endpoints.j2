@@ -90,6 +90,7 @@ impl {{ endpoint.operation | pascalcase }}Response{
 #[derive(Serialize, Deserialize, {% if endpoint.parameters.query | filter(attribute="required", value=true) | length == 0 %}Default{% endif %})]
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{%- for q in endpoint.parameters.query %}
+    #[serde(rename = "{{ q.name }}"{% if not q.required and q.nullable %}, deserialize_with = "optional_nullable"{% elif not q.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
 	pub {{ m::property_name(name = q.name) }}: {% if not q.required %}Option<{% endif %}{% if q.model %}{{ m::type(property = q.model, ns = "super::model") }}{% elif q.model.enum %}{{ m::type(property = q.model.enum, ns = "super::model") }}{% endif %}{% if not q.required %}>{% endif %},
 	{% endfor -%}
 }
