@@ -1,7 +1,8 @@
-use actix_web::{middleware, web, App, HttpServer};
-use rabbitmq::actix::{manager, producer};
-
+#[derive(Clone)]
 pub struct Database {}
+
+#[derive(Clone)]
+pub struct MessageBus {}
 
 impl Database {
     pub async fn get_smth(&self) -> bool {
@@ -9,23 +10,22 @@ impl Database {
     }
 }
 
-pub struct Repository {}
-
-impl Repository {
-    pub async fn get_smth(&self) -> bool {
+impl MessageBus {
+    pub async fn send(&self) -> bool {
         true
     }
 }
 
 mod api;
 mod client;
-mod rabbitmq;
 mod handler {
-    use crate::{api, rabbitmq::actix::producer::Producer, Database, Repository};
-    use actix::Addr;
-    use actix_web::web;
+    use std::sync::Arc;
 
-    pub async fn livez_list(db: web::Data<Database>) -> api::endpoint::LivezListResponse {
+    use axum::Extension;
+
+    use crate::{api, Database, MessageBus};
+
+    pub async fn livez_list(db: Extension<Arc<Database>>) -> api::endpoint::LivezListResponse {
         let _result = db.get_smth().await;
 
         api::endpoint::LivezListResponse::Status200(api::model::ServiceStatus {
@@ -34,7 +34,7 @@ mod handler {
         })
     }
 
-    pub async fn readyz_list(db: web::Data<Database>) -> api::endpoint::ReadyzListResponse {
+    pub async fn readyz_list(db: Extension<Arc<Database>>) -> api::endpoint::ReadyzListResponse {
         let _result = db.get_smth().await;
 
         api::endpoint::ReadyzListResponse::Status200(api::model::ServiceStatus {
@@ -45,7 +45,7 @@ mod handler {
 
     pub async fn devices_list_v1(
         query: api::endpoint::DevicesListV1Query,
-        (db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
+        Extension(db): Extension<Arc<Database>>,
     ) -> Result<api::model::ListDevices200Response, api::model::ListDevices400Response> {
         let _result = db.get_smth().await;
 
@@ -89,7 +89,7 @@ mod handler {
 
     pub async fn devices_get_v1(
         path: api::endpoint::DeviceGetV1Path,
-        (db, _, _repository): (web::Data<Database>, web::Data<Addr<Producer>>, web::Data<Repository>),
+        Extension(db): Extension<Arc<Database>>,
     ) -> api::endpoint::DeviceGetV1Response {
         let _result = db.get_smth().await;
 
@@ -113,127 +113,149 @@ mod handler {
 
     pub async fn devices_create_v1(
         _request: api::model::Device,
-        (db, _producer): (web::Data<Database>, web::Data<Addr<Producer>>),
+        Extension(db): Extension<Arc<Database>>,
+        Extension(bus): Extension<Arc<MessageBus>>,
     ) -> api::endpoint::DeviceCreateV1Response {
         let _result = db.get_smth().await;
+        let _result2 = bus.send().await;
 
         api::endpoint::DeviceCreateV1Response::Status201
     }
 
     pub async fn accessory_create_v1(
         data: api::model::Accessory,
-        (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
     ) -> api::endpoint::AccessoryCreateV1Response {
         match data.accessory_id.as_str() {
-            "conflict" => api::endpoint::AccessoryCreateV1Response::Status409(api::model::AccessoryCreateError {
-                error: api::model::AccessoryCreateErrorError{
-                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Conflicterror,
+            "conflict" => api::endpoint::AccessoryCreateV1Response::Status409(
+                api::model::AccessoryCreateError {
+                    error: api::model::AccessoryCreateErrorError {
+                        code: api::model::AccessoryCreateErrorErrorCodeVariant::Conflicterror,
+                    },
                 },
-            }),
-            "error" => api::endpoint::AccessoryCreateV1Response::Status400(api::model::AccessoryCreateError {
-                error: api::model::AccessoryCreateErrorError{
-                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Validationerror,
+            ),
+            "error" => api::endpoint::AccessoryCreateV1Response::Status400(
+                api::model::AccessoryCreateError {
+                    error: api::model::AccessoryCreateErrorError {
+                        code: api::model::AccessoryCreateErrorErrorCodeVariant::Validationerror,
+                    },
                 },
-            }),
-            _ => api::endpoint::AccessoryCreateV1Response::Status400(api::model::AccessoryCreateError {
-                error: api::model::AccessoryCreateErrorError{
-                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Notfound,
+            ),
+            _ => api::endpoint::AccessoryCreateV1Response::Status400(
+                api::model::AccessoryCreateError {
+                    error: api::model::AccessoryCreateErrorError {
+                        code: api::model::AccessoryCreateErrorErrorCodeVariant::Notfound,
+                    },
                 },
-            })
+            ),
         }
     }
-    
+
     pub async fn accessory_get_v1(
         path: api::endpoint::AccessoryGetV1Path,
-        (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
+        Extension(db): Extension<Arc<Database>>,
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
-            return api::endpoint::AccessoryGetV1Response::Status400(api::endpoint::GetAccessory400ResponseWithHeaders{
-                body: api::model::GetAccessory400Response::new(
-                    None,
-                ),
-                headers: api::endpoint::AccessoryGetV1Response400Headers{
-                    x_hash_key: "hash-error".to_string(),
-                }
-            });
+            return api::endpoint::AccessoryGetV1Response::Status400(
+                api::endpoint::GetAccessory400ResponseWithHeaders {
+                    body: api::model::GetAccessory400Response::new(None),
+                    headers: api::endpoint::AccessoryGetV1Response400Headers {
+                        x_hash_key: "hash-error".to_string(),
+                    },
+                },
+            );
         }
 
-        api::endpoint::AccessoryGetV1Response::Status200(api::endpoint::GetAccessory200ResponseWithHeaders{
-            body: api::model::GetAccessory200Response::new(
-                api::model::Accessory::new(path.accessory_id),
-            ),
-            headers: api::endpoint::AccessoryGetV1Response200Headers{
-                x_hash_key: "hash".to_string(),
-            }
-        })
+        api::endpoint::AccessoryGetV1Response::Status200(
+            api::endpoint::GetAccessory200ResponseWithHeaders {
+                body: api::model::GetAccessory200Response::new(api::model::Accessory::new(
+                    path.accessory_id,
+                )),
+                headers: api::endpoint::AccessoryGetV1Response200Headers {
+                    x_hash_key: "hash".to_string(),
+                },
+            },
+        )
     }
 
     pub async fn accessory_get_log_v1(
         _path: api::endpoint::AccessoryLogListV1Path,
-        (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
+        Extension(db): Extension<Arc<Database>>,
     ) -> api::endpoint::AccessoryLogListV1Response {
         api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
     }
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let database = web::Data::new(Database {});
-    let repository = web::Data::new(Repository {});
+use std::{net::SocketAddr, sync::Arc};
 
-    run_server(database, repository).await
+#[tokio::main]
+async fn main() {
+    let database = Arc::new(Database {});
+    let messagebus = Arc::new(MessageBus {});
+
+    run_server(database, messagebus, 8080).await
 }
 
-async fn run_server(database: web::Data<Database>, repository: web::Data<Repository>) -> std::io::Result<()> {
-    HttpServer::new(move || {
-        let manager = manager::RabbitmqManager::start("amqp://127.0.0.1:5672/%2f");
+async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: u16) {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
 
-        App::new()
-            .wrap(middleware::Logger::new("%a %{User-Agent}i %U"))
-            .app_data(web::Data::new(producer::Producer::start(
-                manager,
-                "".to_string(),
-            )))
-            .app_data(database.clone())
-            .app_data(repository.clone())
-            // enable logger
-            .wrap(middleware::Logger::default())
-            .configure(api::service::configure_health(
-                handler::livez_list,
-                handler::readyz_list,
-            ))
-            .configure(api::service::configure_devices(
-                handler::devices_list_v1,
-                handler::devices_create_v1,
-                handler::devices_get_v1,
-            ))
-            .configure(api::service::configure_accessories(
-                handler::accessory_create_v1,
-                handler::accessory_get_v1,
-                handler::accessory_get_log_v1,
-            ))
-    })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+    let devices = api::service::DevicesRouter::new()
+        .devices_list_v1(handler::devices_list_v1)
+        .device_create_v1(handler::devices_create_v1)
+        .device_get_v1(handler::devices_get_v1);
+
+    let accessories = api::service::AccessoriesRouter::new()
+        .accessory_create_v1(handler::accessory_create_v1)
+        .accessory_log_list_v1(handler::accessory_get_log_v1)
+        .accessory_get_v1(handler::accessory_get_v1);
+
+    let health = api::service::HealthRouter::new()
+        .livez_list(handler::livez_list)
+        .readyz_list(handler::readyz_list);
+
+    let app = axum::Router::new()
+        .merge(devices)
+        .merge(accessories)
+        .merge(health)
+        .layer(axum::Extension(database))
+        .layer(axum::Extension(messagebus));
+
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        convert::TryInto,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
     use crate::client::error::ClientError;
 
     use super::*;
 
-    async fn run_server(database: web::Data<super::Database>, repository: web::Data<super::Repository>) -> Option<String> {
-        actix::spawn(super::run_server(database, repository));
-        // todo: chaned for waiting for port...
-        actix::clock::sleep(std::time::Duration::from_millis(100)).await;
-        Some("http://127.0.0.1:8080".to_string())
+    static PORT: AtomicUsize = AtomicUsize::new(8080);
+
+    async fn run_server(
+        database: Arc<super::Database>,
+        messagebus: Arc<super::MessageBus>,
+    ) -> Option<String> {
+        let port = PORT.fetch_add(1, Ordering::SeqCst);
+
+        tokio::spawn(super::run_server(
+            database,
+            messagebus,
+            port.try_into().unwrap(),
+        ));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        Some(format!("http://127.0.0.1:{}", port))
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_devices_list_v1_simple() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -248,9 +270,9 @@ mod tests {
         assert_eq!(result.unwrap().data.len(), 0);
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_devices_list_v1_qs_deep_object_filter() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -274,9 +296,9 @@ mod tests {
         );
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_devices_list_v1_qs_page() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -297,9 +319,9 @@ mod tests {
         );
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_devices_list_v1_qs_reserved_word() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -320,18 +342,16 @@ mod tests {
         );
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_accessories_get_v1_response_header() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client
-            .accessory_get_v1("1111".to_string())
-            .await;
+        let result = client.accessory_get_v1("1111".to_string()).await;
 
         assert_eq!(result.is_err(), false);
 
@@ -340,36 +360,43 @@ mod tests {
         let hash = headers.get("x-hash-key");
 
         assert_eq!(data.data.accessory_id, "1111".to_string());
-        assert_eq!(hash, Some(&reqwest::header::HeaderValue::from_static("hash")));
+        assert_eq!(
+            hash,
+            Some(&reqwest::header::HeaderValue::from_static("hash"))
+        );
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_accessories_get_v1_response_error_header() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client
-            .accessory_get_v1("invalid".to_string())
-            .await;
+        let result = client.accessory_get_v1("invalid".to_string()).await;
 
         assert_eq!(result.is_err(), true);
 
         let res = result.unwrap_err();
-        if let super::client::error::ClientError::Error(super::client::devices::endpoint::AccessoryGetV1Error::Error400(_, headers)) = res {
+        if let super::client::error::ClientError::Error(
+            super::client::devices::endpoint::AccessoryGetV1Error::Error400(_, headers),
+        ) = res
+        {
             let hash = headers.get("x-hash-key");
-            assert_eq!(hash, Some(&reqwest::header::HeaderValue::from_static("hash-error")));
+            assert_eq!(
+                hash,
+                Some(&reqwest::header::HeaderValue::from_static("hash-error"))
+            );
         } else {
             panic!("Wrong response");
         }
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_devices_get_v1_not_found() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -391,9 +418,9 @@ mod tests {
         assert!(matches!(error, _expected));
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_accessory_list_v1_log() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -404,20 +431,25 @@ mod tests {
 
         let data = result.unwrap();
 
-        assert_eq!("plain-text-data".to_string(), data.response.text().await.unwrap());
+        assert_eq!(
+            "plain-text-data".to_string(),
+            data.response.text().await.unwrap()
+        );
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_accessory_create_v1_error_conflict() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
 
-        let result = client.accessory_create_v1(super::client::devices::model::Accessory::new(
-            "conflict".to_string(),
-        )).await;
+        let result = client
+            .accessory_create_v1(super::client::devices::model::Accessory::new(
+                "conflict".to_string(),
+            ))
+            .await;
 
         assert_eq!(true, result.is_err());
 
@@ -435,17 +467,19 @@ mod tests {
         assert!(matches!(error, _expected));
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_accessory_create_v1_error_validation() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
 
-        let result = client.accessory_create_v1(super::client::devices::model::Accessory::new(
-            "error".to_string(),
-        )).await;
+        let result = client
+            .accessory_create_v1(super::client::devices::model::Accessory::new(
+                "error".to_string(),
+            ))
+            .await;
 
         assert_eq!(true, result.is_err());
 
@@ -463,9 +497,9 @@ mod tests {
         assert!(matches!(error, _expected));
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_devices_get_v1_integer_enums_passed_as_json_numbers() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -483,9 +517,9 @@ mod tests {
         assert_eq!("10", serialized);
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_devices_create_v1_simple() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 
@@ -505,9 +539,9 @@ mod tests {
         assert_eq!(data.response.status().as_u16(), 201);
     }
 
-    #[actix_web::test]
+    #[tokio::test]
     async fn test_actix_client() {
-        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
 

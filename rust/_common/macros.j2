@@ -116,11 +116,14 @@
 {% if security.scheme == 'basic' %}Authorization{% else %}{{ security.name }}{% endif %}
 {%- endmacro get_auth_header %}
 
-{% macro endpoint_return(success, endpoint, options) -%}{% filter nospaces %}Result<
-    {% if success == "no-models" %}
+{% macro endpoint_return(success, endpoint, headers, options) -%}{% filter nospaces %}Result<
+    {% if success == "no-models" or success.contentType is not starting_with("application/json") %}
     {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
     {% elif success.model %}
+    {% if headers | length > 0 %}({% endif %}
     {{ self::type(property = success.model, ns = "model") }}
+    {% if headers | length > 0 %}, reqwest::header::HeaderMap
+    ){% endif %}
     {% else %}
     reqwest::Response
     {% endif %},

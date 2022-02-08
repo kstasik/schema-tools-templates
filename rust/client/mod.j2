@@ -58,6 +58,8 @@ impl {{ options.name }} {
     {% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
     
     {% for success in endpoint.responses.success.models.all | default(value = ["no-models"]) %}
+    {% set success_headers = endpoint.responses.success.headers | default(value = []) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+
     #[allow(dead_code)]
     pub async fn {{ endpoint.operation | snakecase }}{% if success.vnd %}_{{ success.vnd | snakecase }}{% endif %}(
         &self, {{ e::endpoint_parameters(endpoint=endpoint, options=options) }}
@@ -65,7 +67,7 @@ impl {{ options.name }} {
         {%- if endpoint.requestbody.models.default %} body: {{ m::type(property = endpoint.requestbody.models.default.model, ns = "model" ) }}, {% endif -%}
         {%- if endpoint.parameters.query | length > 0 %} query: endpoint::{{ endpoint.operation | pascalcase }}Query, {% endif %}
         {%- if filtered_headers | length > 0 %} headers: endpoint::{{ endpoint.operation | pascalcase }}Headers, {% endif %}
-    ) -> {{ m::endpoint_return(success = success, endpoint = endpoint, options = options) }} {
+    ) -> {{ m::endpoint_return(success = success, endpoint = endpoint, headers = success_headers, options = options) }} {
         {% if "tracing" in apm %}
         let span = tracing::info_span!(
             "dependency",
@@ -88,10 +90,10 @@ impl {{ options.name }} {
         // setup headers
         let mut final_headers = vec![{% if success != "no-models" %}(
             HeaderName::from_static("accept"),
-            HeaderValue::from_static("{{ success.content_type }}"),
+            HeaderValue::from_static("{{ success.contentType }}"),
         ),{% endif %}{%- if endpoint.requestbody.models.default %}(
             HeaderName::from_static("content-type"),
-            HeaderValue::from_static("{{ endpoint.requestbody.models.default.content_type }}"),
+            HeaderValue::from_static("{{ endpoint.requestbody.models.default.contentType }}"),
         ),
         {% endif %}];
 
@@ -170,11 +172,14 @@ impl {{ options.name }} {
 
         let status = response.status();
         if status.is_success() {
-            {% if success.model %}
+            {% if success_headers | length > 0 %}let headers = response.headers().clone();{% endif %}
+
+            {% if success.model and success.contentType is starting_with("application/json") %}
             return response
                 .json::<{{ m::type(property = success.model, ns = "model") }}>()
                 .await
                 .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
+                {% if success_headers | length > 0 %}.map(|d| (d, headers)){% endif %}
             {% else %}
             return Ok({{ m::endpoint_default_response(endpoint = endpoint, options = options) }}::from_response(response))
             {% endif %}

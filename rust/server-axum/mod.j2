@@ -1,0 +1,14 @@
+{# type=static,filename=api/mod.rs,min_version=0.5.0 #}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
+
+#[allow(dead_code, unused_imports)]
+pub mod endpoint;
+#[allow(dead_code, unused_imports)]
+pub mod model;
+#[allow(dead_code, unused_imports)]
+pub mod service;
+{%- if options.qs | default(value = "serde_urlencoded") == "serde_qs" %}
+#[allow(dead_code, unused_imports)]
+pub mod qs;
+{% endif %}

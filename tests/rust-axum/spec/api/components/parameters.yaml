@@ -1,0 +1,11 @@
+traceParentHeader:
+  in: header
+  name: traceparent
+  schema:
+    $ref: ../types.yaml#/TraceParent
+
+traceStateHeader:
+  in: header
+  name: tracestate
+  schema:
+    $ref: ../types.yaml#/TraceState
