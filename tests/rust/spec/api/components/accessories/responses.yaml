@@ -1,3 +1,26 @@
+getAccessory200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+    x-hash-key:
+      required: true
+      schema:
+        type: string
+  content:
+    application/json:
+      schema:
+        title: GetAccessoryResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Accessory
+
 getAccessories200:
   description: Operation succeeded.
   headers:

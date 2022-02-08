@@ -84,8 +84,8 @@ pub struct {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }
 {% if filtered_response_headers | length > 0 %}
 {% if froms_with_headers is not containing(response.models.default.model.model.name) %}
 pub struct {{ m::type(property = response.models.default.model, ns = "") }}WithHeaders {
-    body: {{ m::type(property = response.models.default.model, ns = "super::model") }},
-    headers: {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers
+    pub body: {{ m::type(property = response.models.default.model, ns = "super::model") }},
+    pub headers: {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers
 }
 
 {% set_global froms_with_headers = froms_with_headers | concat(with=response.models.default.model.model.name) %}

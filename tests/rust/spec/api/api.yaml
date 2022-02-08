@@ -55,6 +55,10 @@ components:
     createDevice400:
       $ref: components/devices/responses.yaml#/createDevice400
 
+    # accessories
+    getAccessory200:
+      $ref: components/accessories/responses.yaml#/getAccessory200
+
   requestBodies:
     createDevice:
       $ref: components/devices/request-bodies.yaml#/createDevice
@@ -74,6 +78,8 @@ components:
       $ref: components/devices/parameters.yaml#/listDevicesForQuery
     deviceIdPath:
       $ref: components/devices/parameters.yaml#/deviceIdPath
+    accessoryIdPath:
+      $ref: components/accessories/parameters.yaml#/accessoryIdPath
 
   securitySchemes:
     basicAuth:
@@ -169,3 +175,22 @@ paths:
         - $ref: '#/components/parameters/traceParentHeader'
         - $ref: '#/components/parameters/traceStateHeader'
         - $ref: '#/components/parameters/deviceIdPath'
+
+  # accessories
+  /v1/accessories/{accessoryId}:
+    get:
+      tags:
+        - accessories
+      description: Get all accessories
+      operationId: getAccessories
+      responses:
+        200:
+          $ref: '#/components/responses/getAccessory200'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/accessoryIdPath'

@@ -111,6 +111,20 @@ mod handler {
 
         api::endpoint::DeviceCreateV1Response::Status201
     }
+    
+    pub async fn accessory_get_v1(
+        path: api::endpoint::AccessoryGetV1Path,
+        (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
+    ) -> api::endpoint::AccessoryGetV1Response {
+        api::endpoint::AccessoryGetV1Response::Status200(api::endpoint::GetAccessory200ResponseWithHeaders{
+            body: api::model::GetAccessory200Response::new(
+                api::model::Accessory::new(path.accessory_id),
+            ),
+            headers: api::endpoint::AccessoryGetV1Response200Headers{
+                xhashkey: "hash".to_string(),
+            }
+        })
+    }
 }
 
 #[actix_web::main]
@@ -141,6 +155,9 @@ async fn run_server(database: web::Data<Database>) -> std::io::Result<()> {
                 handler::devices_list_v1,
                 handler::devices_create_v1,
                 handler::devices_get_v1,
+            ))
+            .configure(api::service::configure_accessories(
+                handler::accessory_get_v1,
             ))
     })
     .bind("127.0.0.1:8080")?
@@ -251,6 +268,29 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_accessories_get_v1_response_header() {
+        let uri = run_server(web::Data::new(Database {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
+            .with_auth_basic_auth("testing");
+
+        let result = client
+            .accessory_get_v1("1111".to_string())
+            .await;
+
+        assert_eq!(result.is_err(), false);
+
+        let (data, headers) = result.unwrap();
+
+        let hash = headers.get("x-hash-key");
+
+        assert_eq!(data.data.accessory_id, "1111".to_string());
+        assert_eq!(hash, Some(&reqwest::header::HeaderValue::from_static("hash")));
+    }
+
+    #[actix_web::test]
     async fn test_devices_get_v1_not_found() {
         let uri = run_server(web::Data::new(Database {}))
             .await
@@ -296,6 +336,28 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_create_v1_simple() {
+        let uri = run_server(web::Data::new(Database {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client.device_create_v1(
+            super::client::devices::model::Device {
+                device_id: "test".to_string(),
+                device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
+            }
+        ).await;
+
+        assert_eq!(result.is_err(), false);
+
+        let data = result.unwrap();
+
+        assert_eq!(data.response.status().as_u16(), 201);
+    }
+
+    #[actix_web::test]
+    async fn test_actix_client() {
         let uri = run_server(web::Data::new(Database {}))
             .await
             .expect("Cannot run server");
