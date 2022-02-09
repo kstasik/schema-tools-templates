@@ -58,6 +58,8 @@ components:
     # accessories
     getAccessory200:
       $ref: components/accessories/responses.yaml#/getAccessory200
+    getAccessory400:
+      $ref: components/accessories/responses.yaml#/getAccessory400
 
   requestBodies:
     createDevice:
@@ -182,10 +184,12 @@ paths:
       tags:
         - accessories
       description: Get all accessories
-      operationId: getAccessories
+      operationId: getAccessory
       responses:
         200:
           $ref: '#/components/responses/getAccessory200'
+        400:
+          $ref: '#/components/responses/getAccessory400'
         403:
           $ref: '#/components/responses/forbidden403'
         500:

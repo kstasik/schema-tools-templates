@@ -13,14 +13,16 @@ use std::pin::Pin;
 {% set allowed_operations = e::allowed_operations(endpoints=tag.endpoints, options=options) | split(pat=" ") %}
 {% set filtered_endpoints = tag.endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
 {% for endpoint in filtered_endpoints %}
+{% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+{% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 //
 // {{ endpoint.method }} {{ endpoint.path }}
 //
 #[derive(Debug, PartialEq)]
 pub enum {{ endpoint.operation | pascalcase }}Error {
 	{% for response in endpoint.responses.all  %}
-    {% if response != endpoint.responses.success %}
-	Error{{ response.statusCode }}({{ m::type(property = response.models.default.model, ns = "super::model") }}),
+    {% if response != endpoint.responses.success %}	
+	Error{{ response.statusCode }}({{ m::type(property = response.models.default.model, ns = "super::model") }}{% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %}, reqwest::header::HeaderMap{% endif %}),
     {% endif %}
 	{% endfor %}
 }
@@ -31,10 +33,20 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 			match response.status().as_u16() {
 				{% for response in endpoint.responses.all  %}
 				{% if response != endpoint.responses.success %}
-				{{ response.statusCode }} => response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
+				{{ response.statusCode }} => {% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %} {
+					let headers = response.headers().clone();
+					
+					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
+						.await
+						.map(|d| Self::Error{{ response.statusCode }}(d, headers))
+						.ok()
+				},
+				{% else %}
+				response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
 					.await
 					.map(Self::Error{{ response.statusCode }})
 					.ok(),
+				{% endif %}
 				{% endif %}
 				{% endfor %}
 				_ => None
@@ -42,9 +54,6 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 		})
 	}
 }
-
-{% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
-{% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 
 {%- if filtered_headers | length > 0 %}
 pub struct {{ endpoint.operation | pascalcase }}Headers{

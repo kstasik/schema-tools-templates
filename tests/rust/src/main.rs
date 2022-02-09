@@ -116,6 +116,17 @@ mod handler {
         path: api::endpoint::AccessoryGetV1Path,
         (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
     ) -> api::endpoint::AccessoryGetV1Response {
+        if path.accessory_id == "invalid" {
+            return api::endpoint::AccessoryGetV1Response::Status400(api::endpoint::GetAccessory400ResponseWithHeaders{
+                body: api::model::GetAccessory400Response::new(
+                    None,
+                ),
+                headers: api::endpoint::AccessoryGetV1Response400Headers{
+                    xhashkey: "hash-error".to_string(),
+                }
+            });
+        }
+
         api::endpoint::AccessoryGetV1Response::Status200(api::endpoint::GetAccessory200ResponseWithHeaders{
             body: api::model::GetAccessory200Response::new(
                 api::model::Accessory::new(path.accessory_id),
@@ -288,6 +299,30 @@ mod tests {
 
         assert_eq!(data.data.accessory_id, "1111".to_string());
         assert_eq!(hash, Some(&reqwest::header::HeaderValue::from_static("hash")));
+    }
+
+    #[actix_web::test]
+    async fn test_accessories_get_v1_response_error_header() {
+        let uri = run_server(web::Data::new(Database {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
+            .with_auth_basic_auth("testing");
+
+        let result = client
+            .accessory_get_v1("invalid".to_string())
+            .await;
+
+        assert_eq!(result.is_err(), true);
+
+        let res = result.unwrap_err();
+        if let super::client::error::ClientError::Error(super::client::devices::endpoint::AccessoryGetV1Error::Error400(_, headers)) = res {
+            let hash = headers.get("x-hash-key");
+            assert_eq!(hash, Some(&reqwest::header::HeaderValue::from_static("hash-error")));
+        } else {
+            panic!("Wrong response");
+        }
     }
 
     #[actix_web::test]

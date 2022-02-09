@@ -21,6 +21,30 @@ getAccessory200:
               data:
                 $ref: schemas.yaml#/Accessory
 
+getAccessory400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+    x-hash-key:
+      required: true
+      schema:
+        type: string
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/MultipleResources
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
 getAccessories200:
   description: Operation succeeded.
   headers:
