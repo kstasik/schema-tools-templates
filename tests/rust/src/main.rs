@@ -111,6 +111,29 @@ mod handler {
 
         api::endpoint::DeviceCreateV1Response::Status201
     }
+
+    pub async fn accessory_create_v1(
+        data: api::model::Accessory,
+        (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
+    ) -> api::endpoint::AccessoryCreateV1Response {
+        match data.accessory_id.as_str() {
+            "conflict" => api::endpoint::AccessoryCreateV1Response::Status409(api::model::AccessoryCreateError {
+                error: api::model::AccessoryCreateErrorError{
+                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Conflicterror,
+                },
+            }),
+            "error" => api::endpoint::AccessoryCreateV1Response::Status400(api::model::AccessoryCreateError {
+                error: api::model::AccessoryCreateErrorError{
+                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Validationerror,
+                },
+            }),
+            _ => api::endpoint::AccessoryCreateV1Response::Status400(api::model::AccessoryCreateError {
+                error: api::model::AccessoryCreateErrorError{
+                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Notfound,
+                },
+            })
+        }
+    }
     
     pub async fn accessory_get_v1(
         path: api::endpoint::AccessoryGetV1Path,
@@ -122,7 +145,7 @@ mod handler {
                     None,
                 ),
                 headers: api::endpoint::AccessoryGetV1Response400Headers{
-                    xhashkey: "hash-error".to_string(),
+                    x_hash_key: "hash-error".to_string(),
                 }
             });
         }
@@ -132,9 +155,16 @@ mod handler {
                 api::model::Accessory::new(path.accessory_id),
             ),
             headers: api::endpoint::AccessoryGetV1Response200Headers{
-                xhashkey: "hash".to_string(),
+                x_hash_key: "hash".to_string(),
             }
         })
+    }
+
+    pub async fn accessory_get_log_v1(
+        _path: api::endpoint::AccessoryLogListV1Path,
+        (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
+    ) -> api::endpoint::AccessoryLogListV1Response {
+        api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
     }
 }
 
@@ -168,7 +198,9 @@ async fn run_server(database: web::Data<Database>) -> std::io::Result<()> {
                 handler::devices_get_v1,
             ))
             .configure(api::service::configure_accessories(
+                handler::accessory_create_v1,
                 handler::accessory_get_v1,
+                handler::accessory_get_log_v1,
             ))
     })
     .bind("127.0.0.1:8080")?
@@ -341,6 +373,78 @@ mod tests {
                 client::devices::model::GetDevice400Response {
                     error: client::devices::model::GetDevice400ResponseError::new(
                         client::devices::model::GetDevice400ResponseErrorCodeVariant::Notfound,
+                    ),
+                },
+            ),
+        );
+
+        assert!(matches!(error, _expected));
+    }
+
+    #[actix_web::test]
+    async fn test_accessory_list_v1_log() {
+        let uri = run_server(web::Data::new(Database {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client.accessory_log_list_v1("missing".to_string()).await;
+        assert_eq!(false, result.is_err());
+
+        let data = result.unwrap();
+
+        assert_eq!("plain-text-data".to_string(), data.response.text().await.unwrap());
+    }
+
+    #[actix_web::test]
+    async fn test_accessory_create_v1_error_conflict() {
+        let uri = run_server(web::Data::new(Database {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client.accessory_create_v1(super::client::devices::model::Accessory::new(
+            "conflict".to_string(),
+        )).await;
+
+        assert_eq!(true, result.is_err());
+
+        let error = result.unwrap_err();
+        let _expected = ClientError::Error(
+            super::client::devices::endpoint::AccessoryCreateV1Error::Error409(
+                client::devices::model::AccessoryCreateError {
+                    error: client::devices::model::AccessoryCreateErrorError::new(
+                        client::devices::model::AccessoryCreateErrorErrorCodeVariant::Conflicterror,
+                    ),
+                },
+            ),
+        );
+
+        assert!(matches!(error, _expected));
+    }
+
+    #[actix_web::test]
+    async fn test_accessory_create_v1_error_validation() {
+        let uri = run_server(web::Data::new(Database {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client.accessory_create_v1(super::client::devices::model::Accessory::new(
+            "error".to_string(),
+        )).await;
+
+        assert_eq!(true, result.is_err());
+
+        let error = result.unwrap_err();
+        let _expected = ClientError::Error(
+            super::client::devices::endpoint::AccessoryCreateV1Error::Error400(
+                client::devices::model::AccessoryCreateError {
+                    error: client::devices::model::AccessoryCreateErrorError::new(
+                        client::devices::model::AccessoryCreateErrorErrorCodeVariant::Validationerror,
                     ),
                 },
             ),

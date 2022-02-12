@@ -7,3 +7,12 @@ Accessory:
     accessoryId:
       type: string
       format: uuid
+
+CreateAccessoryError:
+  allOf:
+    - $ref: ../../types.yaml#/ErrorResource
+    - properties:
+        error:
+          properties:
+            code:
+              enum: [ 'not-found', 'validation-error', 'conflict-error' ]

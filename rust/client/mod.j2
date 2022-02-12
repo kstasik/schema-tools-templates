@@ -174,7 +174,7 @@ impl {{ options.name }} {
         if status.is_success() {
             {% if success_headers | length > 0 %}let headers = response.headers().clone();{% endif %}
 
-            {% if success.model %}
+            {% if success.model and success.content_type is starting_with("application/json") %}
             return response
                 .json::<{{ m::type(property = success.model, ns = "model") }}>()
                 .await

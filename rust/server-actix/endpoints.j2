@@ -82,7 +82,8 @@ pub struct {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }
 {% for response in endpoint.responses.all %}
 {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
 {% if filtered_response_headers | length > 0 %}
-{% if froms_with_headers is not containing(response.models.default.model.model.name) %}
+{% if not response.models.default.model.model %}
+{% elif froms_with_headers is not containing(response.models.default.model.model.name) %}
 pub struct {{ m::type(property = response.models.default.model, ns = "") }}WithHeaders {
     pub body: {{ m::type(property = response.models.default.model, ns = "super::model") }},
     pub headers: {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers
@@ -109,7 +110,13 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for HttpResponse {
 			match response {
 				{% for response in endpoint.responses.all %}
                 {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
-				{{ endpoint.operation | pascalcase }}Response::Status{{ response.statusCode }}{% if response.models %}(d) => d.into(){% else %} => HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap()).finish(){% endif %},
+				{{ endpoint.operation | pascalcase }}Response::Status{{ response.statusCode }}{% if response.models -%}
+                {% if response.models.default.model.type == "string" %}
+                (d) => HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap()).body(d)
+                {% else %}
+                (d) => d.into()
+                {% endif %}
+                {%- else %} => HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap()).finish(){% endif %},
 				{% endfor %}
 			}
     }
@@ -128,7 +135,9 @@ impl<O, E> From<Result<O, E>> for {{ endpoint.operation | pascalcase }}Response 
 {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
 
 {% if response.models %}
-{% if froms is not containing(response.models.default.model.model.name) %}
+{% if not response.models.default.model.model %}
+/* AAA2: {{ response.models.default | json_encode(pretty=true) }} */
+{% elif froms is not containing(response.models.default.model.model.name) %}
 impl From<{% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}> for HttpResponse {
     fn from(d: {% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}) -> HttpResponse {
         let mut builder = HttpResponse::build(StatusCode::from_u16({{ response.statusCode }}).unwrap());
@@ -136,13 +145,13 @@ impl From<{% if filtered_response_headers | length == 0 %}{{ m::type(property = 
         {% if filtered_response_headers | filter(attribute="required", value=true) | length > 0 %}
         builder
             {% for param in filtered_response_headers | filter(attribute="required", value=true) %}
-            .append_header((HeaderName::from_static("{{ param.name }}"), d.headers.{{ m::property_name(name = param.name) }}))
+            .append_header((HeaderName::from_static("{{ param.name | lower }}"), d.headers.{{ m::property_name(name = param.name) }}))
             {% endfor %};
         {% endif %}
 
         {% for param in filtered_response_headers | filter(attribute="required", value=false)  %}
         if let Some(header) = d.headers.{{ m::property_name(name = param.name) }} {
-            builder.append_header((HeaderName::from_static("{{ param.name }}"), header));
+            builder.append_header((HeaderName::from_static("{{ param.name | lower }}"), header));
         }
         {% endfor %}
     

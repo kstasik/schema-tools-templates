@@ -67,9 +67,9 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 		vec![
 			{%- for q in filtered_headers %}
 			{% if q.required %}
-			Some((HeaderName::from_static("{{ q.name }}"), HeaderValue::from_bytes(self.{{ m::property_name(name = q.name) }}.as_ref()).unwrap())),
+			Some((HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_bytes(self.{{ m::property_name(name = q.name) }}.as_ref()).unwrap())),
 			{% else %}
-			self.{{ m::property_name(name = q.name) }}.map(|v| (HeaderName::from_static("{{ q.name }}"), HeaderValue::from_str({{ m::to_str(q = q.model, required = q.required, name = 'v') }}).unwrap())),
+			self.{{ m::property_name(name = q.name) }}.map(|v| (HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_str({{ m::to_str(q = q.model, required = q.required, name = 'v') }}).unwrap())),
 			{% endif %}
 			{% endfor -%}
 		]
@@ -80,7 +80,7 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 }
 {% endif %}
 
-{% if not endpoint.responses.success.models %}
+{% if not endpoint.responses.success.models or endpoint.responses.success.models.default.content_type is not starting_with("application/json") %}
 #[derive(Debug)]
 pub struct {{ endpoint.operation | pascalcase }}Response{
 	pub response: reqwest::Response, 

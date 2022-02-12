@@ -117,7 +117,7 @@
 {%- endmacro get_auth_header %}
 
 {% macro endpoint_return(success, endpoint, headers, options) -%}{% filter nospaces %}Result<
-    {% if success == "no-models" %}
+    {% if success == "no-models" or success.content_type is not starting_with("application/json") %}
     {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
     {% elif success.model %}
     {% if headers | length > 0 %}({% endif %}
