@@ -72,7 +72,7 @@ impl<
         Box::pin(async move {
             let deps = async {
                 Dependencies::extract(&req).await.map_err(|e| e.into())
-            }; 
+            };
 
 			{% set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody.models.default %}
 
@@ -102,7 +102,7 @@ impl<
                     actix_web::HttpResponse::from_error(err)
                 },
                 Ok(({% if endpoint.requestbody.models.default %}body, {% endif %}{% if endpoint.parameters.path | length > 0 %}path, {% endif %}{% if endpoint.parameters.query | length > 0 %}query, {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps)) => {
-                    let response = handle({% if endpoint.requestbody.models.default %}body.into_inner(), {% endif %}{% if endpoint.parameters.path | length > 0 %}path.into_inner(), {% endif %}{% if endpoint.parameters.query | length > 0 %}query.into_inner(), {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps).await;
+                    let response = handle({% if endpoint.parameters.path | length > 0 %}path.into_inner(), {% endif %}{% if endpoint.requestbody.models.default %}body.into_inner(), {% endif %}{% if endpoint.parameters.query | length > 0 %}query.into_inner(), {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps).await;
 
 					let body: super::endpoint::{{ endpoint.operation | pascalcase }}Response = response.into();
                     actix_web::HttpResponse::from(body)
@@ -155,7 +155,7 @@ pub fn configure_{{ tag.tag | snakecase }}<
 				web::{{ endpoint.method }}().service(actix_web::dev::fn_factory(move || async move { Ok({{ endpoint.operation | pascalcase }}Service::new({{ endpoint.operation | snakecase }})) }))
 			)
 			{% endfor %}
-			
+
 		;
     }
 }
