@@ -132,8 +132,8 @@ pub fn configure_{{ tag.tag | snakecase }}<
 	{% for endpoint in tag.endpoints %}
 	{{ endpoint.operation | pascalcase }},
 	{{ endpoint.operation | pascalcase }}Response,
+	{{ endpoint.operation | pascalcase }}Dependencies,
 	{% endfor %}
-	Dependencies
 >(
 	{% for endpoint in tag.endpoints %}
 	{{ endpoint.operation | snakecase }}: {{ endpoint.operation | pascalcase }},
@@ -141,11 +141,11 @@ pub fn configure_{{ tag.tag | snakecase }}<
 ) -> impl Fn(&mut web::ServiceConfig)
     where
 		{% for endpoint in tag.endpoints %}
-		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}{{ endpoint.operation | pascalcase }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
 		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
 		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
+		{{ endpoint.operation | pascalcase }}Dependencies: actix_web::FromRequest + 'static,
 		{%- endfor %}
-        Dependencies: actix_web::FromRequest + 'static,
 {
     move |cfg: &mut web::ServiceConfig| {
         cfg
