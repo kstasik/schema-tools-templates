@@ -1,6 +1,7 @@
 {% macro model_object_impl(model, options) %}
 {% set names = model.object.properties | map(attribute="name") %}
-{% if model.object.name is ending_with("Meta") %}
+{% set type_property = model.object.properties | filter(attribute="name", value="type") | first %}
+{% if model.object.name is ending_with("Meta") and type_property %}
 impl std::convert::Into<FieldTable> for {{ m::model_name(name = model.object.name) }} {
     fn into(self) -> FieldTable {
         let mut headers = FieldTable::default();
@@ -66,7 +67,6 @@ impl std::convert::From<FieldTable> for {{ m::model_name(name = model.object.nam
 }
 
 impl {{ m::model_name(name = model.object.name) }} {
-    {% set type_property = model.object.properties | filter(attribute="name", value="type") | first %}
     fn get_type() -> String {
         "{{ type_property.model.name }}".to_string()
     }
