@@ -9,11 +9,19 @@ impl Database {
     }
 }
 
+pub struct Repository {}
+
+impl Repository {
+    pub async fn get_smth(&self) -> bool {
+        true
+    }
+}
+
 mod api;
 mod client;
 mod rabbitmq;
 mod handler {
-    use crate::{api, rabbitmq::actix::producer::Producer, Database};
+    use crate::{api, rabbitmq::actix::producer::Producer, Database, Repository};
     use actix::Addr;
     use actix_web::web;
 
@@ -81,7 +89,7 @@ mod handler {
 
     pub async fn devices_get_v1(
         path: api::endpoint::DeviceGetV1Path,
-        (db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
+        (db, _, _repository): (web::Data<Database>, web::Data<Addr<Producer>>, web::Data<Repository>),
     ) -> api::endpoint::DeviceGetV1Response {
         let _result = db.get_smth().await;
 
@@ -116,11 +124,12 @@ mod handler {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let database = web::Data::new(Database {});
+    let repository = web::Data::new(Repository {});
 
-    run_server(database).await
+    run_server(database, repository).await
 }
 
-async fn run_server(database: web::Data<Database>) -> std::io::Result<()> {
+async fn run_server(database: web::Data<Database>, repository: web::Data<Repository>) -> std::io::Result<()> {
     HttpServer::new(move || {
         let manager = manager::RabbitmqManager::start("amqp://127.0.0.1:5672/%2f");
 
@@ -131,6 +140,7 @@ async fn run_server(database: web::Data<Database>) -> std::io::Result<()> {
                 "".to_string(),
             )))
             .app_data(database.clone())
+            .app_data(repository.clone())
             // enable logger
             .wrap(middleware::Logger::default())
             .configure(api::service::configure_health(
@@ -154,8 +164,8 @@ mod tests {
 
     use super::*;
 
-    async fn run_server(database: web::Data<super::Database>) -> Option<String> {
-        actix::spawn(super::run_server(database));
+    async fn run_server(database: web::Data<super::Database>, repository: web::Data<super::Repository>) -> Option<String> {
+        actix::spawn(super::run_server(database, repository));
         // todo: chaned for waiting for port...
         actix::clock::sleep(std::time::Duration::from_millis(100)).await;
         Some("http://127.0.0.1:8080".to_string())
@@ -163,7 +173,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_list_v1_simple() {
-        let uri = run_server(web::Data::new(Database {}))
+        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
             .await
             .expect("Cannot run server");
 
@@ -180,7 +190,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_list_v1_qs_deep_object_filter() {
-        let uri = run_server(web::Data::new(Database {}))
+        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
             .await
             .expect("Cannot run server");
 
@@ -206,7 +216,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_list_v1_qs_page() {
-        let uri = run_server(web::Data::new(Database {}))
+        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
             .await
             .expect("Cannot run server");
 
@@ -229,7 +239,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_list_v1_qs_reserved_word() {
-        let uri = run_server(web::Data::new(Database {}))
+        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
             .await
             .expect("Cannot run server");
 
@@ -252,7 +262,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_get_v1_not_found() {
-        let uri = run_server(web::Data::new(Database {}))
+        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
             .await
             .expect("Cannot run server");
 
@@ -276,7 +286,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_get_v1_integer_enums_passed_as_json_numbers() {
-        let uri = run_server(web::Data::new(Database {}))
+        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
             .await
             .expect("Cannot run server");
 
@@ -296,7 +306,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_devices_create_v1_simple() {
-        let uri = run_server(web::Data::new(Database {}))
+        let uri = run_server(web::Data::new(Database {}), web::Data::new(Repository {}))
             .await
             .expect("Cannot run server");
 
