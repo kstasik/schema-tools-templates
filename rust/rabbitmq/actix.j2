@@ -693,7 +693,10 @@ pub mod consumer {
                         .properties
                         .headers()
                         .as_ref()
-                        .and_then(|ft| ft.inner().get_key_value("type"))
+                        .and_then(|ft| match ft.inner().get_key_value("type") {
+                            None => ft.inner().get_key_value("Type"),
+                            Some(key_value) => Some(key_value),
+                        })
                         .and_then(|(_, value)| match value {
                             amq_protocol_types::AMQPValue::LongString(val) => Some(val),
                             _ => None,
