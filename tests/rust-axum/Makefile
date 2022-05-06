@@ -23,14 +23,11 @@ codegen: install-dependencies format
 
 	$(SCHEMATOOLS_BIN) chain -vvvv \
 		-c 'registry add templates ../../' \
-		-c 'process dereference spec/message/all.yaml --skip-root-internal-references --create-internal-references' \
-		-c 'codegen json-schema - --template templates::rust/_common/ --template templates::rust/rabbitmq/ -o apm=tracing-opentelemetry -o "log=log" -o "client=actix" ${FORMAT} --target-dir src/' \
-		\
 		-c 'process dereference spec/api/api.yaml --skip-root-internal-references --create-internal-references' \
 		-c 'process merge-all-of - --leave-invalid-properties --filter "x-skip!=true"' \
 		-c 'process name - --overwrite --resource-method-version' \
-		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/server-actix/ ${FORMAT} --target-dir src/ -o qs=serde_qs' \
-		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/client/ --format "rustfmt --edition 2021" --target-dir src/client/ -o qs=serde_qs -o apm=tracing-opentelemetry -o namespace=devices -o name=DevicesClient'
+		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/server-axum/ ${FORMAT} --target-dir src/ -o qs=serde_qs' \
+		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/client/ ${FORMAT} --target-dir src/client/ -o qs=serde_qs -o apm=tracing-opentelemetry -o namespace=devices -o name=DevicesClient'
  
 install-dependencies: platform
 	@echo installing dependencies ...

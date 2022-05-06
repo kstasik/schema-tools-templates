@@ -1,0 +1,77 @@
+{%- import "macros.j2" as m -%}
+
+{% macro log(type, options) -%}{% filter trim %}
+{% if options.log | default(value = "tracing") == "tracing" %}
+tracing::{{ type }}!
+{% elif options.log == "log" %}
+log::{{ type }}!
+{% endif %}
+{% endfilter %}{%- endmacro log %}
+
+{% macro skipped_headers(endpoint, options) -%}{% filter trim %}
+traceparent tracestate
+{% endfilter %}{%- endmacro skipped_headers %}
+
+{% macro into_response(response, name) -%}
+{%- if response.models.default.model.type == "string" %}
+model.into_response()
+{%- else %}
+(StatusCode::from_u16({{ response.statusCode }}).unwrap(), Json({{ name }})).into_response()
+{% endif %}
+{%- endmacro into_response %}
+
+{% macro endpoint_parameters(endpoint) -%}
+{%- set skipped_headers = self::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") -%}
+{%- set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) -%}
+{%- if endpoint.parameters.path | length > 0 -%}
+super::endpoint::{{ endpoint.operation | pascalcase }}Path,
+{%- endif -%}
+{%- if endpoint.parameters.query | length > 0 -%}
+super::endpoint::{{ endpoint.operation | pascalcase }}Query,
+{%- endif -%}
+{%- if endpoint.requestbody.models.default -%}
+super::model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }},
+{%- endif -%}
+{%- if filtered_headers | length > 0 -%}
+super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
+{%- endif -%}
+{%- endmacro endpoint_parameters %}
+
+{% macro handler_definition_body(endpoint, qs, filtered_headers) -%}
+{%- set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody.models.default %}
+                    {%- if extra %}
+                    {%- if endpoint.parameters.path | length > 0 %}
+                    let path = match req.extract::<axum::extract::Path::<super::endpoint::{{ endpoint.operation | pascalcase }}Path>>().await {
+                        Ok(value) => value,
+                        Err(err) => return err.into_response(),	
+                    };
+                    {%- endif %}
+
+                    {%- if endpoint.parameters.query | length > 0 %}
+                    let query = match req.extract::<{% if qs == "serde_qs" %}super::qs::Query{% else %}axum::extract::Query{% endif %}::<super::endpoint::{{ endpoint.operation | pascalcase }}Query>>().await {
+                        Ok(value) => value,
+                        Err(err) => return err.into_response(),	
+                    };
+                    {%- endif %}
+
+                    {%- if filtered_headers | length > 0 %}
+                    // todo: let headers = <super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders as actix_web::FromRequest>::extract(&req);
+                    {% endif %}
+
+                    {%- if endpoint.requestbody.models.default -%}
+                    let body = match req.extract::<axum::Json::<super::model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }}>>().await {
+                        Ok(value) => value,
+                        Err(err) => return err.into_response(),	
+                    };
+                    {%- endif %}
+                    {%- endif %}
+
+{%- endmacro handler_definition_body %}
+
+
+{% macro handler_definition_parameters(endpoint, qs, filtered_headers) -%}    
+{%- if endpoint.requestbody.models.default -%}, body.0{%- endif -%}
+{%- if endpoint.parameters.path | length > 0 -%}, path.0{%- endif -%}
+{%- if endpoint.parameters.query | length > 0 -%}, query.0{%- endif %}
+{%- if filtered_headers | length > 0 -%}, headers.0{%- endif -%}
+{%- endmacro handler_definition_parameters %}

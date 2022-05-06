@@ -1,0 +1,61 @@
+deviceIdPath:
+  in: path 
+  name: deviceId
+  required: true
+  schema:
+    type: string
+    format: uuid
+
+listDevicesFilterQuery:
+  name: filter
+  description: Filter devices
+  in: query
+  required: false
+  style: deepObject
+  schema:
+    type: object
+    additionalProperties: false
+    properties:
+      deviceId:
+        type: string
+      remoteId:
+        type: string
+      types:
+        type: array
+        items:
+          type: string
+          enum: ['simple', 'extended']
+
+listDevicesSortQuery:
+  name: sort
+  description: Sort devices
+  in: query
+  required: false
+  style: deepObject
+  schema:
+    type: object
+    additionalProperties: false
+    properties:
+      deviceId:
+        type: string
+        enum: ['asc', 'desc']
+      remoteId:
+        type: string
+        enum: ['asc', 'desc']
+
+listDevicesPageQuery:
+  name: page
+  description: Page of results
+  in: query
+  required: false
+  schema:
+    type: integer
+    minimum: 0
+
+listDevicesForQuery:
+  name: for
+  description: Test of reserved word in most languages
+  in: query
+  required: false
+  schema:
+    type: string

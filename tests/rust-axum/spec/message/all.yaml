@@ -1,0 +1,11 @@
+---
+
+$ref: ./components/devices/created-v1.yaml
+
+---
+
+$ref: ./components/devices/updated-v1.yaml
+
+---
+
+$ref: ./components/devices/deleted-v1.yaml

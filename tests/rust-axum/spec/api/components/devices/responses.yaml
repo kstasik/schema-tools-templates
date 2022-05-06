@@ -1,51 +1,5 @@
-getAccessory200:
-  description: Operation succeeded.
-  headers:
-    traceparent:
-      schema:
-        $ref: ../../types.yaml#/TraceParent
-    tracestate:
-      schema:
-        $ref: ../../types.yaml#/TraceState
-    X-Hash-Key:
-      required: true
-      schema:
-        type: string
-  content:
-    application/json:
-      schema:
-        title: GetAccessoryResponse
-        allOf:
-          - $ref: ../../types.yaml#/SingleResource
-          - properties:
-              data:
-                $ref: schemas.yaml#/Accessory
-
-getAccessory400:
-  description: Operation failed.
-  headers:
-    traceparent:
-      schema:
-        $ref: ../../types.yaml#/TraceParent
-    tracestate:
-      schema:
-        $ref: ../../types.yaml#/TraceState
-    X-Hash-Key:
-      required: true
-      schema:
-        type: string
-  content:
-    application/json:
-      schema:
-        allOf:
-          - $ref: ../../types.yaml#/MultipleResources
-          - properties:
-              error:
-                properties:
-                  code:
-                    enum: [ 'not-found', 'validation-error' ]
-
-getAccessories200:
+# get
+getDevice200:
   description: Operation succeeded.
   headers:
     traceparent:
@@ -57,14 +11,14 @@ getAccessories200:
   content:
     application/json:
       schema:
-        title: GetAccessoriesResponse
+        title: GetDeviceResponse
         allOf:
           - $ref: ../../types.yaml#/SingleResource
           - properties:
               data:
                 $ref: schemas.yaml#/Device
 
-getAccessories400:
+getDevice400:
   description: Operation failed.
   headers:
     traceparent:
@@ -77,14 +31,15 @@ getAccessories400:
     application/json:
       schema:
         allOf:
-          - $ref: ../../types.yaml#/MultipleResources
+          - $ref: ../../types.yaml#/ErrorResource
           - properties:
               error:
                 properties:
                   code:
                     enum: [ 'not-found', 'validation-error' ]
 
-createAccessory200:
+# list
+listDevices200:
   description: Operation succeeded.
   headers:
     traceparent:
@@ -93,49 +48,59 @@ createAccessory200:
     tracestate:
       schema:
         $ref: ../../types.yaml#/TraceState
-    X-Hash-Key:
-      required: true
-      schema:
-        type: string
   content:
     application/json:
       schema:
-        title: CreateAccessoryResponse
+        title: ListDevicesResponse
+        allOf:
+          - $ref: ../../types.yaml#/MultipleResources
+          - properties:
+              data:
+                type: array
+                items:
+                  $ref: schemas.yaml#/Device
+
+listDevices400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
+# get
+getDevice200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: GetDeviceResponse
         allOf:
           - $ref: ../../types.yaml#/SingleResource
           - properties:
               data:
-                $ref: schemas.yaml#/Accessory
+                $ref: schemas.yaml#/Device
 
-createAccessory400:
-  description: Operation failed.
-  headers:
-    traceparent:
-      schema:
-        $ref: ../../types.yaml#/TraceParent
-    tracestate:
-      schema:
-        $ref: ../../types.yaml#/TraceState
-  content:
-    application/json:
-      schema:
-        $ref: ./schemas.yaml#/CreateAccessoryError
-
-createAccessory409:
-  description: Operation failed.
-  headers:
-    traceparent:
-      schema:
-        $ref: ../../types.yaml#/TraceParent
-    tracestate:
-      schema:
-        $ref: ../../types.yaml#/TraceState
-  content:
-    application/json:
-      schema:
-        $ref: ./schemas.yaml#/CreateAccessoryError
-
-getAccessoryLog200:
+createDevice201:
   description: Operation succeeded.
   headers:
     traceparent:
@@ -144,7 +109,23 @@ getAccessoryLog200:
     tracestate:
       schema:
         $ref: ../../types.yaml#/TraceState
-  content:
-    text/plain:
+
+createDevice400:
+  description: Operation failed.
+  headers:
+    traceparent:
       schema:
-        type: string
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'already-exists' ]

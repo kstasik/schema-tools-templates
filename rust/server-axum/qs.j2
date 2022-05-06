@@ -1,0 +1,54 @@
+{# type=static,filename=api/qs.rs,min_version=0.5.0,if=%options.qs%:serde_qs #}
+{%- import "extra.j2" as e -%}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
+use std::{pin::Pin, sync::Arc};
+
+use async_trait::async_trait;
+use axum::{
+    extract::{rejection::QueryRejection, FromRequest, RequestParts},
+    http,
+    response::{IntoResponse, Response},
+    BoxError
+};
+use serde::de::{self, DeserializeOwned};
+use serde_qs::Error;
+use std::ops::Deref;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Query<T>(pub T);
+
+#[async_trait]
+impl<T, B> FromRequest<B> for Query<T>
+where
+    T: DeserializeOwned,
+    B: Send,
+{
+    type Rejection = FailedToDeserializeQueryStringRejection;
+
+    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
+        let query = req.uri().query().unwrap_or_default();
+
+        let value = serde_qs::from_str::<T>(query)
+            .map_err(FailedToDeserializeQueryStringRejection)?;
+
+        Ok(Query(value))
+    }
+}
+
+impl<T> Deref for Query<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct FailedToDeserializeQueryStringRejection(Error);
+
+impl IntoResponse for FailedToDeserializeQueryStringRejection {
+    fn into_response(self) -> Response {
+        (http::StatusCode::BAD_REQUEST, self.0.to_string()).into_response()
+    }
+}

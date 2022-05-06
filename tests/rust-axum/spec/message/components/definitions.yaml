@@ -1,0 +1,9 @@
+Device:
+  additionalProperties: false
+  type: object
+  required:
+    - deviceId 
+  properties:
+    deviceId:
+      type: string
+      format: uuid
