@@ -51,6 +51,10 @@ mod handler {
 
         if query.for_.map(|f| f.eq("test")).unwrap_or(false) {
             return Ok(api::model::ListDevices200Response {
+                pagination: api::model::Pagination::new(
+                    1,
+                    api::model::PaginationPageSizeVariant::PaginationPageSize10,
+                ),
                 data: vec![api::model::Device::new(
                     "3801deea-8a6d-46cc-bc60-1e8ead00b0db".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
@@ -70,6 +74,10 @@ mod handler {
             .unwrap_or(false)
         {
             return Ok(api::model::ListDevices200Response {
+                pagination: api::model::Pagination::new(
+                    1,
+                    api::model::PaginationPageSizeVariant::PaginationPageSize10,
+                ),
                 data: vec![api::model::Device::new(
                     "a9604d6a-3f76-476b-bfbf-97a940e879d8".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
@@ -77,6 +85,10 @@ mod handler {
             });
         } else if query.page.unwrap_or(0) == 2 {
             return Ok(api::model::ListDevices200Response {
+                pagination: api::model::Pagination::new(
+                    1,
+                    api::model::PaginationPageSizeVariant::PaginationPageSize10,
+                ),
                 data: vec![api::model::Device::new(
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
@@ -84,7 +96,13 @@ mod handler {
             });
         }
 
-        Ok(api::model::ListDevices200Response { data: vec![] })
+        Ok(api::model::ListDevices200Response {
+            pagination: api::model::Pagination::new(
+                1,
+                api::model::PaginationPageSizeVariant::PaginationPageSize10,
+            ),
+            data: vec![],
+        })
     }
 
     pub async fn devices_get_v1(
@@ -112,14 +130,22 @@ mod handler {
     }
 
     pub async fn devices_create_v1(
-        _request: api::model::Device,
+        request: api::model::Device,
         Extension(db): Extension<Arc<Database>>,
         Extension(bus): Extension<Arc<MessageBus>>,
     ) -> api::endpoint::DeviceCreateV1Response {
         let _result = db.get_smth().await;
         let _result2 = bus.send().await;
 
-        api::endpoint::DeviceCreateV1Response::Status201
+        if request.device_id == "conflict" {
+            api::endpoint::DeviceCreateV1Response::Status409(
+                api::endpoint::DeviceCreateV1Response409Headers {
+                    location: "/v1/devices/654".to_string(),
+                }
+            )
+        } else {
+            api::endpoint::DeviceCreateV1Response::Status201
+        }
     }
 
     pub async fn accessory_create_v1(
@@ -157,7 +183,12 @@ mod handler {
         if path.accessory_id == "invalid" {
             return api::endpoint::AccessoryGetV1Response::Status400(
                 api::endpoint::GetAccessory400ResponseWithHeaders {
-                    body: api::model::GetAccessory400Response::new(None),
+                    body: api::model::GetAccessory400Response::new(
+                        api::model::GetAccessory400ResponseError {
+                            code:
+                                api::model::GetAccessory400ResponseErrorCodeVariant::Validationerror,
+                        },
+                    ),
                     headers: api::endpoint::AccessoryGetV1Response400Headers {
                         x_hash_key: "hash-error".to_string(),
                     },
@@ -435,6 +466,39 @@ mod tests {
             "plain-text-data".to_string(),
             data.response.text().await.unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn test_device_create_v1_error_conflict() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client
+            .device_create_v1(super::client::devices::model::Device::new(
+                "conflict".to_string(),
+                super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
+            ))
+            .await;
+
+        assert_eq!(true, result.is_err());
+
+        let error = result.unwrap_err();
+
+        assert!(matches!(error, ClientError::Error(
+            super::client::devices::endpoint::DeviceCreateV1Error::Error409(_),
+        )));
+
+        if let ClientError::Error(super::client::devices::endpoint::DeviceCreateV1Error::Error409(headers)) = error {
+            let expected = reqwest::header::HeaderValue::from_static("/v1/devices/654");
+            assert_eq!(headers.get("location"), Some(&expected));
+        } 
+
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("location", "/v1/devices/654".parse().unwrap());
     }
 
     #[tokio::test]

@@ -27,7 +27,7 @@ lazy_static::lazy_static! {
 pub struct {{ m::model_name(name = model.object.name) }} {
     {% set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") %}
     {% for property in filtered_properties -%}
-    {% if property.validation %}
+    {% if property.validation and property.type != 'enum' %}
     {% if m::get_validation(validation = property.validation) | length %}
     #[validate({{ m::get_validation(validation = property.validation) }})]
     {% endif %}

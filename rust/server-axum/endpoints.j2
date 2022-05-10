@@ -91,10 +91,10 @@ pub struct {{ m::type(property = response.models.default.model, ns = "") }}WithH
 
 pub enum {{ endpoint.operation | pascalcase }}Response {
 	{% for response in endpoint.responses.all -%}
-    {%- if not response.models -%}
-    Status{{ response.statusCode }},
-    {%- else -%}
     {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+    {%- if not response.models -%}
+    Status{{ response.statusCode }}{% if filtered_response_headers | length > 0 %}({{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers){% endif %},
+    {%- else -%}
 	Status{{ response.statusCode }}({% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}),
     {%- endif -%}
 	{% endfor %}
@@ -131,6 +131,24 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<BoxBody> {
                     {{ e::into_response(response = response, name = "model") }}
                     {% endif %}
                     
+                {%- elif filtered_response_headers | length > 0 %}(h) => {
+                    let mut response = StatusCode::from_u16({{ response.statusCode }}).unwrap().into_response();
+                    let headers = response.headers_mut();
+
+                    {% if filtered_response_headers | filter(attribute="required", value=true) | length > 0 %}
+                    {% for param in filtered_response_headers | filter(attribute="required", value=true) %}
+                    headers.insert("{{ param.name | lower }}", HeaderValue::from_str(&h.{{ m::property_name(name = param.name) }}).unwrap());
+                    {% endfor %};
+                    {% endif %}
+
+                    {% for param in filtered_response_headers | filter(attribute="required", value=false)  %}
+                    if let Some(header) = h.{{ m::property_name(name = param.name) }} {
+                        headers.insert("{{ param.name | lower }}", HeaderValue::from_str(&header).unwrap());
+                    }
+                    {% endfor %}
+
+                    response
+                }
                 {%- else %} => StatusCode::from_u16({{ response.statusCode }}).unwrap().into_response(){% endif %},
 				{% endfor %}
 			}
@@ -155,12 +173,7 @@ impl From<{{ m::type(property = model.model, ns = "super::model") }}> for {{ end
 {% endif %}
 {% endfor %}
 
-
-
-
-
 {% endfor %}
-
 {% endfor %}
 {% endfor %}
 

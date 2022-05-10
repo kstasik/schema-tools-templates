@@ -17,6 +17,8 @@ components:
       $ref: types.yaml#/TraceState
     TraceParent:
       $ref: types.yaml#/TraceParent
+    Pagination:
+      $ref: types.yaml#/Pagination
     ServiceStatus:
       $ref: components/schemas.yaml#/ServiceStatus
     Device:
@@ -56,6 +58,8 @@ components:
       $ref: components/devices/responses.yaml#/createDevice201
     createDevice400:
       $ref: components/devices/responses.yaml#/createDevice400
+    createDevice409:
+      $ref: components/devices/responses.yaml#/createDevice409
 
     # accessories
     getAccessory200:
@@ -160,6 +164,8 @@ paths:
           $ref: '#/components/responses/createDevice201'
         400:
           $ref: '#/components/responses/createDevice400'
+        409:
+          $ref: '#/components/responses/createDevice409'
         403:
           $ref: '#/components/responses/forbidden403'
         500:

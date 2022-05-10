@@ -129,3 +129,17 @@ createDevice400:
                 properties:
                   code:
                     enum: [ 'already-exists' ]
+
+createDevice409:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+    location:
+      required: true
+      schema:
+        type: string
