@@ -22,6 +22,7 @@ mod handler {
     use std::sync::Arc;
 
     use axum::Extension;
+    use uuid::{uuid, Uuid};
 
     use crate::{api, Database, MessageBus};
 
@@ -58,6 +59,7 @@ mod handler {
                 data: vec![api::model::Device::new(
                     "3801deea-8a6d-46cc-bc60-1e8ead00b0db".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
+                    uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 )],
             });
         }
@@ -81,6 +83,7 @@ mod handler {
                 data: vec![api::model::Device::new(
                     "a9604d6a-3f76-476b-bfbf-97a940e879d8".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
+                    uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
@@ -92,6 +95,7 @@ mod handler {
                 data: vec![api::model::Device::new(
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
+                    uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 )],
             });
         }
@@ -125,6 +129,7 @@ mod handler {
             data: api::model::Device::new(
                 "test".to_string(),
                 api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
+                uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
             ),
         })
     }
@@ -264,6 +269,7 @@ mod tests {
     };
 
     use crate::client::error::ClientError;
+    use uuid::uuid;
 
     use super::*;
 
@@ -480,6 +486,7 @@ mod tests {
             .device_create_v1(super::client::devices::model::Device::new(
                 "conflict".to_string(),
                 super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
+                uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
             ))
             .await;
 
@@ -593,6 +600,7 @@ mod tests {
             super::client::devices::model::Device {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
+                remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
             }
         ).await;
 
@@ -615,6 +623,7 @@ mod tests {
             super::client::devices::model::Device {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
+                remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
             }
         ).await;
 
