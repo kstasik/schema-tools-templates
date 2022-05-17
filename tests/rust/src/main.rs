@@ -29,7 +29,7 @@ mod handler {
         let _result = db.get_smth().await;
 
         api::endpoint::LivezListResponse::Status200(api::model::ServiceStatus {
-            status: api::model::ServiceStatusStatusVariant::UP,
+            status: api::model::ServiceStatusStatusVariant::Up,
             components: vec![],
         })
     }
@@ -38,7 +38,7 @@ mod handler {
         let _result = db.get_smth().await;
 
         api::endpoint::ReadyzListResponse::Status200(api::model::ServiceStatus {
-            status: api::model::ServiceStatusStatusVariant::UP,
+            status: api::model::ServiceStatusStatusVariant::Up,
             components: vec![],
         })
     }
