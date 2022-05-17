@@ -66,7 +66,7 @@ impl {{ m::model_name(name = model.object.name) }} { {# if sort required first #
 {%- endif %}
 pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {% for option in model.enum.options -%}
-    {% if option == option | when_numeric(prefix="n") | camelcase | upper -%}
+    {% if option == option | when_numeric(prefix="n") | pascalcase -%}
     {{ option }},
     {%- elif model.enum.type == "number" %}
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }} = {{ option }},
@@ -81,7 +81,7 @@ impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Varian
     fn to_string(&self) -> String {
         match self {
             {% for option in model.enum.options -%}
-            Self::{% if option == option | when_numeric(prefix="n") | camelcase | upper -%}
+            Self::{% if option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
             {%- else %}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
@@ -97,7 +97,7 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             {% for option in model.enum.options -%}
-            "{{ option }}" => Ok(Self::{% if option == option | when_numeric(prefix="n") | camelcase | upper -%}
+            "{{ option }}" => Ok(Self::{% if option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
             {%- else %}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
