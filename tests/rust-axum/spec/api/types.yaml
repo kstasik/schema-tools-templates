@@ -23,7 +23,22 @@ TraceState:
 
 MultipleResources:
   type: object
-  required: ['data']
+  required: ['data', 'pagination']
+  properties:
+    pagination:
+      $ref: '#/Pagination'
+
+Pagination:
+  type: object
+  required: ['page', 'pageSize']
+  properties:
+    page:
+      type: integer
+      minimum: 0
+    pageSize:
+      type: integer
+      minimum: 0
+      enum: [5, 10, 15, 50]
 
 SingleResource:
   type: object

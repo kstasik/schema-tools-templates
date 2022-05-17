@@ -6,7 +6,6 @@ Accessory:
   properties:
     accessoryId:
       type: string
-      format: uuid
 
 CreateAccessoryError:
   allOf:

@@ -4,7 +4,6 @@ deviceIdPath:
   required: true
   schema:
     type: string
-    format: uuid
 
 listDevicesFilterQuery:
   name: filter

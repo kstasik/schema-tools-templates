@@ -38,7 +38,7 @@ getAccessory400:
     application/json:
       schema:
         allOf:
-          - $ref: ../../types.yaml#/MultipleResources
+          - $ref: ../../types.yaml#/ErrorResource
           - properties:
               error:
                 properties:

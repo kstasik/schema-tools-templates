@@ -76,10 +76,15 @@
 
 {# todo: model name cannot be one of json-schema types, infinite loop, check #}
 
+
 {% if property.validation and property.validation.format and property.validation.format == "decimal" %}
     Decimal
 {% elif property.type == "string" %}
+    {% if property.validation and property.validation.format and property.validation.format == "uuid" %}
+    uuid::Uuid
+    {% else %}
     String
+    {% endif %}
 {% elif property.type == "boolean" %}
     bool
 {% elif property.type == "integer" and property.validation.minimum | default(value = -1) >= 0 %}

@@ -6,4 +6,3 @@ Device:
   properties:
     deviceId:
       type: string
-      format: uuid

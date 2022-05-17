@@ -22,7 +22,13 @@ use std::pin::Pin;
 pub enum {{ endpoint.operation | pascalcase }}Error {
 	{% for response in endpoint.responses.all  %}
     {% if response != endpoint.responses.success %}	
-	Error{{ response.statusCode }}({{ m::type(property = response.models.default.model, ns = "super::model") }}{% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %}, reqwest::header::HeaderMap{% endif %}),
+	Error{{ response.statusCode }}({%- filter trim_start_matches(pat=", ") -%}
+		{%- if not response.models -%}
+		{%- else -%}
+		{{ m::type(property = response.models.default.model, ns = "super::model") }}
+		{%- endif -%}
+		{% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %}, reqwest::header::HeaderMap{% endif %}),
+	{% endfilter %}
     {% endif %}
 	{% endfor %}
 }
@@ -36,16 +42,24 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 				{{ response.statusCode }} => {% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %} {
 					let headers = response.headers().clone();
 					
+					{% if not response.models %}
+					Some(Self::Error{{ response.statusCode }}(headers))
+					{% else %}
 					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
 						.await
 						.map(|d| Self::Error{{ response.statusCode }}(d, headers))
 						.ok()
+					{% endif %}
 				},
 				{% else %}
-				response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
+					{% if not response.models %}
+					Some(Self::Error{{ response.statusCode }}),
+					{% else %}
+					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
 					.await
 					.map(Self::Error{{ response.statusCode }})
 					.ok(),
+					{% endif %}
 				{% endif %}
 				{% endif %}
 				{% endfor %}
