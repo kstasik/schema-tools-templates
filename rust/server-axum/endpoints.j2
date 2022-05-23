@@ -225,7 +225,7 @@ where
             E: de::Error,
         {
             let mut ids = Vec::new();
-            for id in v.split(",") {
+            for id in v.split(',') {
                 let id = I::deserialize(id.into_deserializer())?;
                 ids.push(id);
             }

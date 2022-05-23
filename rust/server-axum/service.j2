@@ -35,7 +35,7 @@ macro_rules! all_the_tuples {
 {% for tag in tags %}
 /// {{ tag.tag }} router
 pub struct {{ tag.tag | pascalcase }}Router {
-	router: Router,
+	pub(crate) router: Router,
 }
 
 impl {{ tag.tag | pascalcase }}Router {
@@ -59,9 +59,15 @@ impl {{ tag.tag | pascalcase }}Router {
 	{% endfor %}
 }
 
-impl Into<Router> for {{ tag.tag | pascalcase }}Router {
-	fn into(self) -> Router {
-        self.router
+impl Default for {{ tag.tag | pascalcase }}Router {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<{{ tag.tag | pascalcase }}Router> for Router {
+    fn from(r: {{ tag.tag | pascalcase }}Router) -> Self {
+        r.router
     }
 }
 
@@ -89,14 +95,17 @@ where
     B: Send + 'static,
 	{% endif %}
 {
-	fn call(
+	{%- set body = e::handler_definition_body(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers) -%}
+    fn call(
         self,
-        req: Request<B>,
+        {% if not body %}_{% endif %}req: Request<B>,
     ) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
 		Box::pin(async move {
+            {% if body -%}
 			let mut req = RequestParts::new(req);
 			
-{{ e::handler_definition_body(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers)}}
+{{ body }}
+{%- endif %}
 
 			let res = self(
 				{%- filter trim_start_matches(pat=", ") -%}
@@ -129,9 +138,9 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
         {
             fn call(self, req: Request<B>) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
                 Box::pin(async move {
-                    let mut req = RequestParts::new(req);
+			        let mut req = RequestParts::new(req);
 
-					{{ e::handler_definition_body(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers)}}
+                    {{ e::handler_definition_body(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers) }}
 
                     $(
                         let $ty = match $ty::from_request(&mut req).await {
