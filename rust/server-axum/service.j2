@@ -21,7 +21,7 @@ use std::{
 };
 use tower_service::Service;
 
-{% set_global qs = options.qs | default(value = "serde_urlencoded") %}
+
 macro_rules! all_the_tuples {
     ($name:ident) => {
         $name!(T1);
@@ -35,7 +35,7 @@ macro_rules! all_the_tuples {
 {% for tag in tags %}
 /// {{ tag.tag }} router
 pub struct {{ tag.tag | pascalcase }}Router {
-	router: Router,
+	pub(crate) router: Router,
 }
 
 impl {{ tag.tag | pascalcase }}Router {
@@ -47,6 +47,22 @@ impl {{ tag.tag | pascalcase }}Router {
 
 	{% for endpoint in tag.endpoints %}
     /// {{ endpoint.method | upper }} {{ endpoint.path }}
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// async fn handler({{ e::endpoint_parameters(endpoint = endpoint) | trim_end_matches(pat=",") }}) -> {{ endpoint.operation | pascalcase }}Response {
+    ///     todo!();
+    /// }
+    /// let router = {{ tag.tag | pascalcase }}Router::default().{{ endpoint.operation | snakecase }}(handler);
+    /// ```
+    ///
+    /// ```
+    /// async fn handler({{ e::endpoint_parameters(endpoint = endpoint) | trim_end_matches(pat=",") }}, ...extractors) -> {{ endpoint.operation | pascalcase }}Response {
+    ///     todo!();
+    /// }
+    /// let router = {{ tag.tag | pascalcase }}Router::default().{{ endpoint.operation | snakecase }}(handler);
+    /// ```
 	pub fn {{ endpoint.operation | snakecase }}<H, T>(mut self, handler: H) -> Self
         where
             H: {{ endpoint.operation | pascalcase }}Handler<T>,
@@ -59,9 +75,15 @@ impl {{ tag.tag | pascalcase }}Router {
 	{% endfor %}
 }
 
-impl Into<Router> for {{ tag.tag | pascalcase }}Router {
-	fn into(self) -> Router {
-        self.router
+impl Default for {{ tag.tag | pascalcase }}Router {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<{{ tag.tag | pascalcase }}Router> for Router {
+    fn from(r: {{ tag.tag | pascalcase }}Router) -> Self {
+        r.router
     }
 }
 
@@ -89,18 +111,21 @@ where
     B: Send + 'static,
 	{% endif %}
 {
-	fn call(
+	{%- set body = e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers) -%} 
+    fn call(
         self,
-        req: Request<B>,
+        {% if not body %}_{% endif %}req: Request<B>,
     ) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
 		Box::pin(async move {
+            {% if body -%}
 			let mut req = RequestParts::new(req);
 			
-{{ e::handler_definition_body(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers)}}
+{{ body }}
+{%- endif %}
 
 			let res = self(
 				{%- filter trim_start_matches(pat=", ") -%}
-				{{ e::handler_definition_parameters(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers)}}, {% endfilter -%}
+				{{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
 			).await;
 
 			let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
@@ -129,9 +154,9 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
         {
             fn call(self, req: Request<B>) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
                 Box::pin(async move {
-                    let mut req = RequestParts::new(req);
+			        let mut req = RequestParts::new(req);
 
-					{{ e::handler_definition_body(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers)}}
+                    {{ e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers) }}
 
                     $(
                         let $ty = match $ty::from_request(&mut req).await {
@@ -141,7 +166,7 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
                     )*
 
                     let res = self({%- filter trim_start_matches(pat=", ") -%}
-						{{ e::handler_definition_parameters(endpoint = endpoint, qs = qs, filtered_headers = filtered_headers)}}, {% endfilter -%}
+						{{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
 						$($ty,)*).await;
 
 					let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
