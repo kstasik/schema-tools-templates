@@ -22,7 +22,7 @@ mod handler {
     use std::sync::Arc;
 
     use axum::Extension;
-    use uuid::{uuid, Uuid};
+    use uuid::uuid;
 
     use crate::{api, Database, MessageBus};
 
@@ -60,6 +60,8 @@ mod handler {
                     "3801deea-8a6d-46cc-bc60-1e8ead00b0db".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
+                    None,
                 )],
             });
         }
@@ -84,6 +86,8 @@ mod handler {
                     "a9604d6a-3f76-476b-bfbf-97a940e879d8".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
+                    None,
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
@@ -96,6 +100,8 @@ mod handler {
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
+                    None,
                 )],
             });
         }
@@ -130,6 +136,8 @@ mod handler {
                 "test".to_string(),
                 api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
+                None,
             ),
         })
     }
@@ -151,6 +159,17 @@ mod handler {
         } else {
             api::endpoint::DeviceCreateV1Response::Status201
         }
+    }
+
+    pub async fn devices_replace_v1(
+        _path: api::endpoint::DevicePutV1Path,
+        request: api::model::Device,
+    ) -> api::endpoint::DevicePutV1Response {
+        api::endpoint::DevicePutV1Response::Status200(
+            api::model::PutDevice200Response::new(
+                request
+            )
+        )
     }
 
     pub async fn accessory_create_v1(
@@ -183,7 +202,7 @@ mod handler {
 
     pub async fn accessory_get_v1(
         path: api::endpoint::AccessoryGetV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        Extension(_db): Extension<Arc<Database>>,
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
             return api::endpoint::AccessoryGetV1Response::Status400(
@@ -215,7 +234,7 @@ mod handler {
 
     pub async fn accessory_get_log_v1(
         _path: api::endpoint::AccessoryLogListV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        Extension(_db): Extension<Arc<Database>>,
     ) -> api::endpoint::AccessoryLogListV1Response {
         api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
     }
@@ -237,7 +256,8 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
     let devices = api::service::DevicesRouter::new()
         .devices_list_v1(handler::devices_list_v1)
         .device_create_v1(handler::devices_create_v1)
-        .device_get_v1(handler::devices_get_v1);
+        .device_get_v1(handler::devices_get_v1)
+        .device_put_v1(handler::devices_replace_v1);
 
     let accessories = api::service::AccessoriesRouter::new()
         .accessory_create_v1(handler::accessory_create_v1)
@@ -475,6 +495,91 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_device_create_v1_enum_complex() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let device = super::client::devices::model::Device::new(
+            "456".to_string(),
+            super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
+            uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+            None,
+            Some(super::client::devices::model::DeviceDataVariant::DoorContainer(
+                super::client::devices::model::DoorContainer::new(
+                    super::client::devices::model::Door::new(
+                        super::client::devices::model::DoorStateVariant::Opened,
+                        "test".to_string(),
+                    )
+                )
+            )),
+        );
+
+        let result = client
+            .device_put_v1("123".to_string(), device.clone())
+            .await;
+
+        assert_eq!(
+            result.unwrap(),
+            super::client::devices::model::PutDevice200Response::new(device)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_device_create_v1_enum_simple_uuid() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let device = super::client::devices::model::Device::new(
+            "456".to_string(),
+            super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
+            uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+            Some(super::client::devices::model::DeviceDeviceSecretNumberVariant::Variant0(uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"))),
+            None,
+        );
+
+        let result = client
+            .device_put_v1("123".to_string(), device.clone())
+            .await;
+
+        assert_eq!(
+            result.unwrap(),
+            super::client::devices::model::PutDevice200Response::new(device)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_device_create_v1_enum_simple_string() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let device = super::client::devices::model::Device::new(
+            "456".to_string(),
+            super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
+            uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+            Some(super::client::devices::model::DeviceDeviceSecretNumberVariant::Variant1("test".to_string())),
+            None,
+        );
+
+        let result = client
+            .device_put_v1("123".to_string(), device.clone())
+            .await;
+
+        assert_eq!(
+            result.unwrap(),
+            super::client::devices::model::PutDevice200Response::new(device)
+        );
+    }
+
+    #[tokio::test]
     async fn test_device_create_v1_error_conflict() {
         let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
@@ -487,6 +592,8 @@ mod tests {
                 "conflict".to_string(),
                 super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
+                None,
             ))
             .await;
 
@@ -601,6 +708,8 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                device_secret_number: None,
+                data: None,
             }
         ).await;
 
@@ -624,6 +733,8 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                device_secret_number: None,
+                data: None,
             }
         ).await;
 

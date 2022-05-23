@@ -143,3 +143,43 @@ createDevice409:
       required: true
       schema:
         type: string
+
+# get
+putDevice200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: PutDeviceResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Device
+
+putDevice400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'validation-error' ]
