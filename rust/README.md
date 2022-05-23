@@ -17,6 +17,15 @@
 | log       	|          	| tracing          	| Type of logging library                                                                                                   	|
 | qs        	|          	| serde_urlencoded 	| Library used for query parameters, available options: serde_qs, serde_urlencoded (use serde_qs for deep  objects support) 	|
 
+
+## server-axum
+
+| Parameter 	| Required 	| Default          	| Description                                                                                                               	|
+|-----------	|----------	|------------------	|---------------------------------------------------------------------------------------------------------------------------	|
+| log       	|          	| tracing          	| Type of logging library                                                                                                   	|
+| qs        	|          	| serde_urlencoded 	| Library used for query parameters, available options: serde_qs, serde_urlencoded (use serde_qs for deep  objects support) 	|
+| extract    	|          	| axum::extract 	| Namespace of extractors                                                                                                   	|
+
 ## rabbitmq
 
 | Parameter 	| Required 	| Default          	| Description                                                                                                               	|
