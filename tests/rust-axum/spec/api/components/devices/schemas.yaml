@@ -14,3 +14,47 @@ Device:
     remoteId:
       type: string
       format: uuid
+    deviceSecretNumber:
+      oneOf:
+        - type: string
+          format: uuid
+        - type: string
+          title: Oooooo
+    data:
+      $ref: '#/DeviceData'
+
+DeviceData:
+  oneOf:
+    - type: object
+      title: TemperatureSensorContainer
+      required: ['temperature']
+      properties:
+        temperature:
+          $ref: '#/TemperatureSensor'
+    - type: object
+      title: DoorContainer
+      required: ['door']
+      properties:
+        door:
+          $ref: '#/Door'
+
+TemperatureSensor:
+  type: object
+  required:
+    - scale
+  properties:
+    scale:
+      type: string
+      enum: ['fahrenheit', 'celsius']
+
+Door:
+  type: object
+  required:
+    - state
+    - name
+  properties:
+    state:
+      type: string
+      enum: ['opened', 'closed']
+    name:
+      type: string

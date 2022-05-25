@@ -21,6 +21,12 @@ components:
       $ref: types.yaml#/Pagination
     ServiceStatus:
       $ref: components/schemas.yaml#/ServiceStatus
+    TemperatureSensor:
+      $ref: components/devices/schemas.yaml#/TemperatureSensor
+    Door:
+      $ref: components/devices/schemas.yaml#/Door
+    DeviceData:
+      $ref: components/devices/schemas.yaml#/DeviceData
     Device:
       $ref: components/devices/schemas.yaml#/Device
     Accessory:
@@ -60,6 +66,10 @@ components:
       $ref: components/devices/responses.yaml#/createDevice400
     createDevice409:
       $ref: components/devices/responses.yaml#/createDevice409
+    putDevice200:
+      $ref: components/devices/responses.yaml#/putDevice200
+    putDevice400:
+      $ref: components/devices/responses.yaml#/putDevice400
 
     # accessories
     getAccessory200:
@@ -191,6 +201,26 @@ paths:
           $ref: '#/components/responses/forbidden403'
         500:
           $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/deviceIdPath'
+    put:
+      tags:
+        - devices
+      description: Replaces device by id
+      operationId: putDevice
+      responses:
+        200:
+          $ref: '#/components/responses/putDevice200'
+        400:
+          $ref: '#/components/responses/putDevice400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      requestBody:
+        $ref: '#/components/requestBodies/createDevice'
       parameters:
         - $ref: '#/components/parameters/traceParentHeader'
         - $ref: '#/components/parameters/traceStateHeader'

@@ -12,6 +12,8 @@ use regex::Regex;
 use rust_decimal::Decimal;
 {% endif %}
 
+{% set simple_types = ["string","number","integer"] %}
+
 lazy_static::lazy_static! {
    static ref DATE_TIME: Regex = Regex::new(r"^[a-z]{2}$").unwrap();
    static ref UUID: Regex = Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap();
@@ -76,7 +78,6 @@ pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {% endif %}
     {%- endfor %} 
 }
-
 impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Variant {
     fn to_string(&self) -> String {
         match self {
@@ -110,9 +111,10 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 
 {%- elif model.wrapper %}
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
-    {{ m::type(property = option) }}({{ m::type(property = option) }}),
+    {% if simple_types is containing(option.type) %}{{ option.name }}{% else %}{{ m::type(property = option) }}{% endif %}({{ m::type(property = option) }}),
     {% endfor %} 
 }
 
@@ -129,7 +131,7 @@ impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
         // todo: too many extra allocations - refactor
         {% for option in model.wrapper.models %}
         if let Ok(result) = serde_json::from_value::<{{ m::type(property = option) }}>(data.clone()) {
-            return Ok(Self::{{ m::type(property = option) }}(result));
+            return Ok(Self::{% if simple_types is containing(option.type) %}{{ option.name }}{% else %}{{ m::type(property = option) }}{% endif %}(result));
         }
         {% endfor %} 
         
