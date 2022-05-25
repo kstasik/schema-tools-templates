@@ -53,7 +53,7 @@
 {% endfilter %}{% endmacro to_str %}
 
 {% macro enum_variant(name, base) %}{% filter nospaces %}
-    {{ name | camelcase | capitalize | replace(from="-", to="") | when_numeric(prefix=base) }}
+    {{ name | pascalcase | when_numeric(prefix=base) }}
 {% endfilter %}{% endmacro enum_variant %}
 
 {% macro get_validation(validation) %}{% filter nospaces %}

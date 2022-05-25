@@ -97,7 +97,7 @@ mod handler {
             return api::endpoint::DeviceGetV1Response::Status400(
                 api::model::GetDevice400Response {
                     error: api::model::GetDevice400ResponseError {
-                        code: api::model::GetDevice400ResponseErrorCodeVariant::Notfound,
+                        code: api::model::GetDevice400ResponseErrorCodeVariant::NotFound,
                     },
                 },
             );
@@ -127,17 +127,17 @@ mod handler {
         match data.accessory_id.as_str() {
             "conflict" => api::endpoint::AccessoryCreateV1Response::Status409(api::model::AccessoryCreateError {
                 error: api::model::AccessoryCreateErrorError{
-                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Conflicterror,
+                    code: api::model::AccessoryCreateErrorErrorCodeVariant::ConflictError,
                 },
             }),
             "error" => api::endpoint::AccessoryCreateV1Response::Status400(api::model::AccessoryCreateError {
                 error: api::model::AccessoryCreateErrorError{
-                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Validationerror,
+                    code: api::model::AccessoryCreateErrorErrorCodeVariant::ValidationError,
                 },
             }),
             _ => api::endpoint::AccessoryCreateV1Response::Status400(api::model::AccessoryCreateError {
                 error: api::model::AccessoryCreateErrorError{
-                    code: api::model::AccessoryCreateErrorErrorCodeVariant::Notfound,
+                    code: api::model::AccessoryCreateErrorErrorCodeVariant::NotFound,
                 },
             })
         }
@@ -382,7 +382,7 @@ mod tests {
             super::client::devices::endpoint::DeviceGetV1Error::Error400(
                 client::devices::model::GetDevice400Response {
                     error: client::devices::model::GetDevice400ResponseError::new(
-                        client::devices::model::GetDevice400ResponseErrorCodeVariant::Notfound,
+                        client::devices::model::GetDevice400ResponseErrorCodeVariant::NotFound,
                     ),
                 },
             ),
@@ -426,7 +426,7 @@ mod tests {
             super::client::devices::endpoint::AccessoryCreateV1Error::Error409(
                 client::devices::model::AccessoryCreateError {
                     error: client::devices::model::AccessoryCreateErrorError::new(
-                        client::devices::model::AccessoryCreateErrorErrorCodeVariant::Conflicterror,
+                        client::devices::model::AccessoryCreateErrorErrorCodeVariant::ConflictError,
                     ),
                 },
             ),
@@ -454,7 +454,7 @@ mod tests {
             super::client::devices::endpoint::AccessoryCreateV1Error::Error400(
                 client::devices::model::AccessoryCreateError {
                     error: client::devices::model::AccessoryCreateErrorError::new(
-                        client::devices::model::AccessoryCreateErrorErrorCodeVariant::Validationerror,
+                        client::devices::model::AccessoryCreateErrorErrorCodeVariant::ValidationError,
                     ),
                 },
             ),
