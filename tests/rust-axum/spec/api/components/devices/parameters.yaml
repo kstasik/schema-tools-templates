@@ -49,7 +49,7 @@ listDevicesPageQuery:
   required: false
   schema:
     type: integer
-    minimum: 0
+    minimum: 1
 
 listDevicesForQuery:
   name: for
