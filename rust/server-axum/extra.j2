@@ -72,8 +72,8 @@ super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
 
 
 {% macro handler_definition_parameters(endpoint, options, filtered_headers) -%}    
-{%- if endpoint.requestbody.models.default -%}, body.0{%- endif -%}
 {%- if endpoint.parameters.path | length > 0 -%}, path.0{%- endif -%}
 {%- if endpoint.parameters.query | length > 0 -%}, query.0{%- endif %}
+{%- if endpoint.requestbody.models.default -%}, body.0{%- endif -%}
 {%- if filtered_headers | length > 0 -%}, headers.0{%- endif -%}
 {%- endmacro handler_definition_parameters %}
