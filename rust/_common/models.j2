@@ -11,9 +11,11 @@ use regex::Regex;
 {% if formats is containing("decimal") %}
 use rust_decimal::Decimal;
 {% endif %}
+{% if formats is containing("date-time") %}
+use chrono::{DateTime, Utc};
+{% endif %}
 
 lazy_static::lazy_static! {
-   static ref DATE_TIME: Regex = Regex::new(r"^[a-z]{2}$").unwrap();
    static ref UUID: Regex = Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap();
    static ref FLOAT: Regex = Regex::new(r"^[0-9\.]+$").unwrap();
 {% for regexp in regexps -%}
