@@ -474,10 +474,7 @@ mod tests {
         let result = client.device_get_v1("existing".to_string()).await;
         let device = result.unwrap();
 
-        assert_eq!(
-            device.data.device_class_type,
-            client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10
-        );
+        assert!(matches!(device.data.device_class_type, client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10));
 
         let serialized = serde_json::to_string(&device.data.device_class_type).unwrap();
         assert_eq!("10", serialized);

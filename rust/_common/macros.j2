@@ -58,7 +58,6 @@
 
 {% macro get_validation(validation) %}{% filter nospaces %}
     {% if validation.format and validation.format == "decimal" %}{% else %}
-    {% if validation.format and validation.format == "date-time" %}regex="DATE_TIME", {% endif %}
     {% if validation.maxLength %}length(max = {{ validation.maxLength }}), {% endif %}
     {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
     {% if validation.pattern %}regex="{{ validation.pattern.name | snakecase | upper }}", {% endif %}
@@ -82,6 +81,8 @@
 {% elif property.type == "string" %}
     {% if property.validation and property.validation.format and property.validation.format == "uuid" %}
     uuid::Uuid
+    {% elif property.validation and property.validation.format and property.validation.format == "date-time" %}
+    DateTime<Utc>
     {% else %}
     String
     {% endif %}

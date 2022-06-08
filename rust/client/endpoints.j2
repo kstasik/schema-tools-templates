@@ -18,7 +18,7 @@ use std::pin::Pin;
 //
 // {{ endpoint.method }} {{ endpoint.path }}
 //
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum {{ endpoint.operation | pascalcase }}Error {
 	{% for response in endpoint.responses.all  %}
     {% if response != endpoint.responses.success %}	

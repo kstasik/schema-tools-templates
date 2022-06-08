@@ -60,6 +60,8 @@ mod handler {
                     "3801deea-8a6d-46cc-bc60-1e8ead00b0db".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
+                    None,
                 )],
             });
         }
@@ -84,6 +86,8 @@ mod handler {
                     "a9604d6a-3f76-476b-bfbf-97a940e879d8".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
+                    None,
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
@@ -96,6 +100,8 @@ mod handler {
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
+                    None,
                 )],
             });
         }
@@ -130,6 +136,8 @@ mod handler {
                 "test".to_string(),
                 api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
+                None,
             ),
         })
     }
@@ -269,6 +277,7 @@ mod tests {
     };
 
     use crate::client::error::ClientError;
+    use chrono::{Utc, TimeZone};
     use uuid::uuid;
 
     use super::*;
@@ -487,6 +496,8 @@ mod tests {
                 "conflict".to_string(),
                 super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
+                None,
             ))
             .await;
 
@@ -579,10 +590,7 @@ mod tests {
         let result = client.device_get_v1("existing".to_string()).await;
         let device = result.unwrap();
 
-        assert_eq!(
-            device.data.device_class_type,
-            client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10
-        );
+        assert!(matches!(device.data.device_class_type, client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10));
 
         let serialized = serde_json::to_string(&device.data.device_class_type).unwrap();
         assert_eq!("10", serialized);
@@ -601,6 +609,32 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                updated_at: None,
+                ratio: Some(10f64),
+            }
+        ).await;
+
+        assert_eq!(result.is_err(), false);
+
+        let data = result.unwrap();
+
+        assert_eq!(data.response.status().as_u16(), 201);
+    }
+    #[tokio::test]
+    async fn test_devices_create_v1_simple_date_time() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client.device_create_v1(
+            super::client::devices::model::Device {
+                device_id: "test".to_string(),
+                device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
+                remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
+                ratio: Some(10f64),
             }
         ).await;
 
@@ -624,6 +658,8 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                updated_at: None,
+                ratio: Some(10f64),
             }
         ).await;
 

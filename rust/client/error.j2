@@ -10,13 +10,13 @@ pub trait ApiError {
 }
 
 #[derive(Debug)]
-pub enum ClientError<T> where T: ApiError +  PartialEq {
+pub enum ClientError<T> where T: ApiError {
     Error(T),
     ReqwestError(reqwest::Error),
     UnsupportedError,
 }
 
-impl<T> ClientError<T> where T: ApiError + PartialEq {
+impl<T> ClientError<T> where T: ApiError {
     pub fn from_reqwest(reqwest: reqwest::Error) -> Self {
         Self::ReqwestError(reqwest)
     }
@@ -30,7 +30,7 @@ impl<T> ClientError<T> where T: ApiError + PartialEq {
 
 impl<T> std::fmt::Display for ClientError<T> 
 where
-    T: ApiError + std::fmt::Debug + PartialEq {
+    T: ApiError + std::fmt::Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "api error occured: {:?}", self)
     }
@@ -39,4 +39,4 @@ where
 
 impl<T> std::error::Error for ClientError<T> 
 where
-    T: ApiError + std::fmt::Debug + PartialEq { }
+    T: ApiError + std::fmt::Debug { }

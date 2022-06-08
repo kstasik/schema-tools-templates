@@ -14,3 +14,8 @@ Device:
     remoteId:
       type: string
       format: uuid
+    updatedAt:
+      type: string
+      format: date-time
+    ratio:
+      type: number
