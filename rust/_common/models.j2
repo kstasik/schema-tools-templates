@@ -25,7 +25,7 @@ lazy_static::lazy_static! {
 
 {% for model in models %}
 {%- if model.object %}
-#[derive(Deserialize, Serialize, Debug, Validate, Clone, PartialEq, Eq{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
+#[derive(Deserialize, Serialize, Debug, Validate, Clone{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
 pub struct {{ m::model_name(name = model.object.name) }} {
     {% set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") %}
     {% for property in filtered_properties -%}
@@ -62,7 +62,7 @@ impl {{ m::model_name(name = model.object.name) }} { {# if sort required first #
 {{ e::model_object_impl(model = model, options = options) }}
 
 {%- elif model.enum %}
-#[derive({%- if model.enum.type == "number" %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone, PartialEq, Eq)]
+#[derive({%- if model.enum.type == "number" %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone)]
 {%- if model.enum.type == "number" %}
 #[repr(u32)]
 {%- endif %}
@@ -111,7 +111,7 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 }
 
 {%- elif model.wrapper %}
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
     {{ m::type(property = option) }}({{ m::type(property = option) }}),

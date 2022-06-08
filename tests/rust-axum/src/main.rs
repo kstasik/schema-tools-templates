@@ -60,7 +60,8 @@ mod handler {
                     "3801deea-8a6d-46cc-bc60-1e8ead00b0db".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-                    None
+                    None,
+                    None,
                 )],
             });
         }
@@ -86,6 +87,7 @@ mod handler {
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                     None,
+                    None,
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
@@ -98,6 +100,7 @@ mod handler {
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
                     None,
                 )],
             });
@@ -133,6 +136,7 @@ mod handler {
                 "test".to_string(),
                 api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
                 None,
             ),
         })
@@ -493,6 +497,7 @@ mod tests {
                 super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 None,
+                None,
             ))
             .await;
 
@@ -585,10 +590,7 @@ mod tests {
         let result = client.device_get_v1("existing".to_string()).await;
         let device = result.unwrap();
 
-        assert_eq!(
-            device.data.device_class_type,
-            client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10
-        );
+        assert!(matches!(device.data.device_class_type, client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10));
 
         let serialized = serde_json::to_string(&device.data.device_class_type).unwrap();
         assert_eq!("10", serialized);
@@ -608,6 +610,7 @@ mod tests {
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: None,
+                ratio: Some(10f64),
             }
         ).await;
 
@@ -631,6 +634,7 @@ mod tests {
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
+                ratio: Some(10f64),
             }
         ).await;
 
@@ -655,6 +659,7 @@ mod tests {
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: None,
+                ratio: Some(10f64),
             }
         ).await;
 

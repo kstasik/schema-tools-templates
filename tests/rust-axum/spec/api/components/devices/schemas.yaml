@@ -17,3 +17,5 @@ Device:
     updatedAt:
       type: string
       format: date-time
+    ratio:
+      type: number
