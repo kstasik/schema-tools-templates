@@ -2,7 +2,6 @@
 {% extends "models.j2" %}
 {% block use %}
 use amq_protocol_types::{AMQPValue, LongString, ShortString};
-use chrono::prelude::{DateTime, Utc};
 use lapin::types::FieldTable;
 use std::str::FromStr;
 {% endblock use %}

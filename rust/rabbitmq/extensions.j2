@@ -1,7 +1,9 @@
+{%- import "extra.j2" as ext -%}
 {% macro model_object_impl(model, options) %}
 {% set names = model.object.properties | map(attribute="name") %}
 {% set type_property = model.object.properties | filter(attribute="name", value="type") | first %}
 {% if model.object.name is ending_with("Meta") and type_property %}
+
 impl std::convert::Into<FieldTable> for {{ m::model_name(name = model.object.name) }} {
     fn into(self) -> FieldTable {
         let mut headers = FieldTable::default();
@@ -49,7 +51,7 @@ impl std::convert::From<FieldTable> for {{ m::model_name(name = model.object.nam
 
         Self {
             {% for property in model.object.properties | filter_not(attribute="type", value="const") %}
-            {{ m::property_name(name = property.name) }}: 
+            {{ m::property_name(name = property.name) }}:
                 bt.get(
                     "{{ property.name }}"
                 ).and_then(|s| match s {
@@ -77,7 +79,7 @@ impl {{ m::model_name(name = model.object.name) }} {
 {% set payload = model.object.properties | filter(attribute="name", value="payload") | first %}
 
 impl super::Message for {{ m::model_name(name = model.object.name) }} {
-   
+
     type Meta = {{ m::type(property = meta) }};
     type Payload = {{ m::type(property = payload) }};
 
@@ -93,6 +95,12 @@ impl super::MessageExtractor for {{ m::model_name(name = model.object.name) }} {
 
     fn extract(headers: FieldTable, data: &str) -> Option<Self> {
         let payload: Result<{{ m::type(property = payload) }}, _> = serde_json::from_str(data);
+
+        if payload.is_err() {
+            {{ ext::log(type = "error", options = options) }}(
+                "MessageExtractor failed: {:?}", payload.as_ref().err()
+            );
+        }
 
         Some(Self {
             meta: {{ m::type(property = meta) }}::from(headers),
