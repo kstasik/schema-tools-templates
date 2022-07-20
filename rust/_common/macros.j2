@@ -1,9 +1,9 @@
 {% macro property_name(name) %}{% filter nospaces %}
     {{ name | replace(from="-", to="") | snakecase }}
-    
+
     {% if name | snakecase in [
-        "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", 
-        "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait", 
+        "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
+        "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait",
         "true", "type", "unsafe", "use", "where", "while", "async", "await", "dyn",
         "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
         "unsized", "virtual", "yield", "try"
@@ -58,6 +58,7 @@
 
 {% macro get_validation(validation) %}{% filter nospaces %}
     {% if validation.format and validation.format == "decimal" %}{% else %}
+    {% if validation.format and validation.format == "date-time" %}regex="DATE_TIME", {% endif %}
     {% if validation.maxLength %}length(max = {{ validation.maxLength }}), {% endif %}
     {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
     {% if validation.pattern %}regex="{{ validation.pattern.name | snakecase | upper }}", {% endif %}
@@ -112,7 +113,7 @@
 {% endfilter %}{% endmacro type %}
 
 {% macro do_not_modify() %}
-// 
+//
 // This file is generated from openapi specification. Please do not modify it.
 // It should be .gitignored
 //

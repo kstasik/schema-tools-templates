@@ -16,6 +16,7 @@ use chrono::{DateTime, Utc};
 {% endif %}
 
 lazy_static::lazy_static! {
+   static ref DATE_TIME: Regex = Regex::new(r"^[a-z]{2}$").unwrap();
    static ref UUID: Regex = Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap();
    static ref FLOAT: Regex = Regex::new(r"^[0-9\.]+$").unwrap();
 {% for regexp in regexps -%}
@@ -72,11 +73,11 @@ pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {{ option }},
     {%- elif model.enum.type == "number" %}
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }} = {{ option }},
-    {%- else %} 
+    {%- else %}
     #[serde(rename = "{{ option }}")]
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }},
     {% endif %}
-    {%- endfor %} 
+    {%- endfor %}
 }
 
 impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Variant {
@@ -115,7 +116,7 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
     {{ m::type(property = option) }}({{ m::type(property = option) }}),
-    {% endfor %} 
+    {% endfor %}
 }
 
 impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
@@ -125,7 +126,7 @@ impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
         {% for option in model.wrapper.models -%}
         {{ m::type(property = option) }}::deserialize(deserializer)
             .map(|t| Self::{{ m::type(property = option) }}(t))
-        {% endfor %} 
+        {% endfor %}
         {% else %}
         let data = &serde_json::Value::deserialize(deserializer)?;
         // todo: too many extra allocations - refactor
@@ -133,8 +134,8 @@ impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
         if let Ok(result) = serde_json::from_value::<{{ m::type(property = option) }}>(data.clone()) {
             return Ok(Self::{{ m::type(property = option) }}(result));
         }
-        {% endfor %} 
-        
+        {% endfor %}
+
         Err(serde::de::Error::custom("Cannot deserialize wrapper"))
         {% endif %}
     }
