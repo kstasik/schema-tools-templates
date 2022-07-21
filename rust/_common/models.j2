@@ -27,7 +27,7 @@ lazy_static::lazy_static! {
 {%- if model.object %}
 #[derive(Deserialize, Serialize, Debug, Validate, Clone{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
 pub struct {{ m::model_name(name = model.object.name) }} {
-    {% set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") %}
+    {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") -%}
     {% for property in filtered_properties -%}
     {% if property.validation and property.type != 'enum' %}
     {% if m::get_validation(validation = property.validation) | length %}
@@ -38,7 +38,7 @@ pub struct {{ m::model_name(name = model.object.name) }} {
     {% endif %}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
     pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
-    {% endfor %}
+    {%- endfor %}
 }
 
 impl {{ m::model_name(name = model.object.name) }} { {# if sort required first #}
@@ -72,11 +72,15 @@ pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {{ option }},
     {%- elif model.enum.type == "number" %}
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }} = {{ option }},
-    {%- else %} 
+    {%- elif option is matching("^[\d]+") %}
+    #[serde(rename = "{{ option }}")]
+    {%set a = 'Code' ~ option %}
+    {{ m::enum_variant(name = a, base = m::model_name(name = a)) }},
+    {%- else %}
     #[serde(rename = "{{ option }}")]
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }},
     {% endif %}
-    {%- endfor %} 
+    {%- endfor %}
 }
 
 impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Variant {
@@ -85,6 +89,11 @@ impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Varian
             {% for option in model.enum.options -%}
             Self::{% if option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
+            {%- elif model.enum.type == "number" %}
+            {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
+            {%- elif option is matching("^[\d]+") %}
+            {%set a = 'Code' ~ option %}
+            {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
             {%- else %}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
             {%- endif %} => "{{ option }}",
@@ -101,6 +110,11 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
             {% for option in model.enum.options -%}
             "{{ option }}" => Ok(Self::{% if option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
+            {%- elif model.enum.type == "number" %}
+            {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
+            {%- elif option is matching("^[\d]+") %}
+            {%set a = 'Code' ~ option %}
+            {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
             {%- else %}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
             {%- endif %}),
@@ -115,7 +129,7 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
     {{ m::type(property = option) }}({{ m::type(property = option) }}),
-    {% endfor %} 
+    {% endfor %}
 }
 
 impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
@@ -125,7 +139,7 @@ impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
         {% for option in model.wrapper.models -%}
         {{ m::type(property = option) }}::deserialize(deserializer)
             .map(|t| Self::{{ m::type(property = option) }}(t))
-        {% endfor %} 
+        {% endfor %}
         {% else %}
         let data = &serde_json::Value::deserialize(deserializer)?;
         // todo: too many extra allocations - refactor
@@ -133,8 +147,8 @@ impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
         if let Ok(result) = serde_json::from_value::<{{ m::type(property = option) }}>(data.clone()) {
             return Ok(Self::{{ m::type(property = option) }}(result));
         }
-        {% endfor %} 
-        
+        {% endfor %}
+
         Err(serde::de::Error::custom("Cannot deserialize wrapper"))
         {% endif %}
     }
