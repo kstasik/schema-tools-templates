@@ -9,6 +9,22 @@ use super::{ClientError, ApiError};
 use std::future::Future;
 use std::pin::Pin;
 
+{% set_global use_datetime = false %}
+{% for tag in tags %}
+    {% set allowed_operations = e::allowed_operations(endpoints=tag.endpoints, options=options) | split(pat=" ") %}
+    {% set filtered_endpoints = tag.endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
+    {% for endpoint in filtered_endpoints %}
+        {%- if endpoint.parameters.query | length > 0 %}
+            {% if m::has_format_query(format="date-time", models=endpoint.parameters.query) %}
+                {% set_global use_datetime = true %}
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+{% if use_datetime %}
+    use chrono::{DateTime, Utc};
+{% endif %}
+
 {% for tag in tags %}
 {% set allowed_operations = e::allowed_operations(endpoints=tag.endpoints, options=options) | split(pat=" ") %}
 {% set filtered_endpoints = tag.endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
@@ -21,7 +37,7 @@ use std::pin::Pin;
 #[derive(Debug)]
 pub enum {{ endpoint.operation | pascalcase }}Error {
 	{% for response in endpoint.responses.all  %}
-    {% if response != endpoint.responses.success %}	
+    {% if response != endpoint.responses.success %}
 	Error{{ response.statusCode }}({%- filter trim_start_matches(pat=", ") -%}
 		{%- if not response.models -%}
 		{%- else -%}
@@ -41,7 +57,7 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 				{% if response != endpoint.responses.success %}
 				{{ response.statusCode }} => {% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %} {
 					let headers = response.headers().clone();
-					
+
 					{% if not response.models %}
 					Some(Self::Error{{ response.statusCode }}(headers))
 					{% else %}
@@ -87,7 +103,7 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 			{% endif %}
 			{% endfor -%}
 		]
-		.iter()	
+		.iter()
 		.filter_map(|f| f.clone())
 		.collect::<Vec<_>>()
 	}
@@ -97,7 +113,7 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 {% if not endpoint.responses.success.models or endpoint.responses.success.models.default.contentType is not starting_with("application/json") %}
 #[derive(Debug)]
 pub struct {{ endpoint.operation | pascalcase }}Response{
-	pub response: reqwest::Response, 
+	pub response: reqwest::Response,
 }
 
 impl {{ endpoint.operation | pascalcase }}Response{

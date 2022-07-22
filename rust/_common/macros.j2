@@ -18,6 +18,12 @@
 {%- endfor %}
 {%- endmacro has_format %}
 
+{% macro has_format_query(format, models) -%}
+    {% for model in models | filter(attribute="model") -%}
+            {% if model.model.validation and model.model.validation.format and model.model.validation.format == format %}1{% endif %}
+    {%- endfor %}
+{%- endmacro has_format_query %}
+
 {% macro model_name(name) %}{% filter nospaces %}
     {{ name  }}
 {% endfilter %}{% endmacro model_name %}
