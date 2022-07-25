@@ -2,10 +2,10 @@
 
 API_VERSION := $(shell cat spec/api/api.yaml | grep '^  version' | cut -d' ' -f4)
 
-SCHEMATOOLS_VERSION := v0.5.2
+SCHEMATOOLS_VERSION := v0.6.0
 SCHEMATOOLS_BIN = dependencies/schematools-$(SCHEMATOOLS_VERSION)
-FORMAT = 
-SCHEMATOOLS_PLATFORM = 
+FORMAT =
+SCHEMATOOLS_PLATFORM =
 
 openapi: install-dependencies format
 	mkdir -p spec/publish/
@@ -28,7 +28,7 @@ codegen: install-dependencies format
 		-c 'process name - --overwrite --resource-method-version' \
 		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/server-axum/ ${FORMAT} --target-dir src/ -o qs=serde_qs' \
 		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/client/ ${FORMAT} --target-dir src/client/ -o qs=serde_qs -o apm=tracing-opentelemetry -o namespace=devices -o name=DevicesClient'
- 
+
 install-dependencies: platform
 	@echo installing dependencies ...
 

@@ -8,6 +8,9 @@ use reqwest::header::{HeaderName, HeaderValue};
 use super::{ClientError, ApiError, ResponseProcessingError};
 use std::future::Future;
 use std::pin::Pin;
+{% if formats is containing("date-time") -%}
+    use chrono::{DateTime, Utc};
+{% endif %}
 
 {% for tag in tags %}
 {% set allowed_operations = e::allowed_operations(endpoints=tag.endpoints, options=options) | split(pat=" ") %}
@@ -21,7 +24,7 @@ use std::pin::Pin;
 #[derive(Debug)]
 pub enum {{ endpoint.operation | pascalcase }}Error {
 	{% for response in endpoint.responses.all  %}
-    {% if response != endpoint.responses.success %}	
+    {% if response != endpoint.responses.success %}
 	Error{{ response.statusCode }}({%- filter trim_start_matches(pat=", ") -%}
 		{%- if not response.models -%}
 		{%- else -%}
@@ -41,7 +44,7 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 				{% if response != endpoint.responses.success %}
 				{{ response.statusCode }} => {% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %} {
 					let headers = response.headers().clone();
-					
+
 					{% if not response.models %}
 					Ok(Self::Error{{ response.statusCode }}(headers))
 					{% else %}
@@ -87,7 +90,7 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 			{% endif %}
 			{% endfor -%}
 		]
-		.iter()	
+		.iter()
 		.filter_map(|f| f.clone())
 		.collect::<Vec<_>>()
 	}
@@ -97,7 +100,7 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 {% if not endpoint.responses.success.models or endpoint.responses.success.models.default.contentType is not starting_with("application/json") %}
 #[derive(Debug)]
 pub struct {{ endpoint.operation | pascalcase }}Response{
-	pub response: reqwest::Response, 
+	pub response: reqwest::Response,
 }
 
 impl {{ endpoint.operation | pascalcase }}Response{
