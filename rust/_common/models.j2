@@ -126,6 +126,7 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 
 {%- elif model.wrapper %}
 #[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
     {{ m::type(property = option) }}({{ m::type(property = option) }}),
