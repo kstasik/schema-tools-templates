@@ -75,8 +75,9 @@
 
 {# todo: model name cannot be one of json-schema types, infinite loop, check #}
 
-
-{% if property.validation and property.validation.format and property.validation.format == "decimal" %}
+{% if property.x.type %}
+    {{ property.x.type }}
+{% elif property.validation and property.validation.format and property.validation.format == "decimal" %}
     Decimal
 {% elif property.type == "string" %}
     {% if property.validation and property.validation.format and property.validation.format == "uuid" %}

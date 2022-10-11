@@ -19,3 +19,11 @@ Device:
       format: date-time
     ratio:
       type: number
+    custom:
+      type: array
+      items:
+        - type: string
+          description: x coordinate
+        - type: string
+          description: y coordinate
+      x-type: crate::Coordinates
