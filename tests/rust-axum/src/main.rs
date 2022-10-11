@@ -1,3 +1,8 @@
+use serde::{Deserialize, Serialize};
+
+use std::{net::SocketAddr, sync::Arc};
+
+
 #[derive(Clone)]
 pub struct Database {}
 
@@ -16,13 +21,16 @@ impl MessageBus {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Coordinates (pub f64, pub f64);
+
 mod api;
 mod client;
 mod handler {
     use std::sync::Arc;
 
     use axum::Extension;
-    use uuid::{uuid, Uuid};
+    use uuid::uuid;
 
     use crate::{api, Database, MessageBus};
 
@@ -62,6 +70,7 @@ mod handler {
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                     None,
                     None,
+                    None,
                 )],
             });
         }
@@ -88,6 +97,7 @@ mod handler {
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                     None,
                     None,
+                    None,
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
@@ -100,6 +110,7 @@ mod handler {
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
                     None,
                     None,
                 )],
@@ -136,6 +147,7 @@ mod handler {
                 "test".to_string(),
                 api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
                 None,
                 None,
             ),
@@ -191,7 +203,7 @@ mod handler {
 
     pub async fn accessory_get_v1(
         path: api::endpoint::AccessoryGetV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        Extension(_db): Extension<Arc<Database>>,
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
             return api::endpoint::AccessoryGetV1Response::Status400(
@@ -223,13 +235,11 @@ mod handler {
 
     pub async fn accessory_get_log_v1(
         _path: api::endpoint::AccessoryLogListV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        Extension(_db): Extension<Arc<Database>>,
     ) -> api::endpoint::AccessoryLogListV1Response {
         api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
     }
 }
-
-use std::{net::SocketAddr, sync::Arc};
 
 #[tokio::main]
 async fn main() {
@@ -282,7 +292,7 @@ mod tests {
 
     use super::*;
 
-    static PORT: AtomicUsize = AtomicUsize::new(8080);
+    static PORT: AtomicUsize = AtomicUsize::new(8090);
 
     async fn run_server(
         database: Arc<super::Database>,
@@ -498,6 +508,7 @@ mod tests {
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 None,
                 None,
+                None,
             ))
             .await;
 
@@ -611,6 +622,7 @@ mod tests {
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: None,
                 ratio: Some(10f64),
+                custom: None,
             }
         ).await;
 
@@ -635,6 +647,7 @@ mod tests {
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
                 ratio: Some(10f64),
+                custom: None,
             }
         ).await;
 
@@ -646,7 +659,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_actix_client() {
+    async fn test_devices_create_v1_custom() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client.device_create_v1(
+            super::client::devices::model::Device {
+                device_id: "test".to_string(),
+                device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
+                remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
+                ratio: Some(10f64),
+                custom: Some(Coordinates(0.5f64, 0.8f64)),
+            }
+        ).await;
+
+        assert_eq!(result.is_err(), false);
+
+        let data = result.unwrap();
+
+        assert_eq!(data.response.status().as_u16(), 201);
+    }
+
+
+    #[tokio::test]
+    async fn test_reqwest_client() {
         let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
             .await
             .expect("Cannot run server");
@@ -660,6 +700,7 @@ mod tests {
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: None,
                 ratio: Some(10f64),
+                custom: None,
             }
         ).await;
 
