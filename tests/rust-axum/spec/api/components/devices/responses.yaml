@@ -128,7 +128,7 @@ createDevice400:
               error:
                 properties:
                   code:
-                    enum: [ 'already-exists' ]
+                    enum: [ 'already-exists', 'validation-error' ]
 
 createDevice409:
   description: Operation succeeded.

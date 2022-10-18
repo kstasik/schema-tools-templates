@@ -31,6 +31,7 @@ mod handler {
 
     use axum::Extension;
     use uuid::uuid;
+    use validator::Validate;
 
     use crate::{api, Database, MessageBus};
 
@@ -71,6 +72,7 @@ mod handler {
                     None,
                     None,
                     None,
+                    None,
                 )],
             });
         }
@@ -98,6 +100,7 @@ mod handler {
                     None,
                     None,
                     None,
+                    None,
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
@@ -110,6 +113,7 @@ mod handler {
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
                     None,
                     None,
                     None,
@@ -150,6 +154,7 @@ mod handler {
                 None,
                 None,
                 None,
+                None,
             ),
         })
     }
@@ -159,6 +164,16 @@ mod handler {
         Extension(db): Extension<Arc<Database>>,
         Extension(bus): Extension<Arc<MessageBus>>,
     ) -> api::endpoint::DeviceCreateV1Response {
+        if let Err(_) = request.validate() {
+            return api::endpoint::DeviceCreateV1Response::Status400(
+                api::model::CreateDevice400Response::new(
+                    api::model::CreateDevice400ResponseError::new(
+                        api::model::CreateDevice400ResponseErrorCodeVariant::ValidationError
+                    ),
+                )
+            )
+        }
+
         let _result = db.get_smth().await;
         let _result2 = bus.send().await;
 
@@ -509,6 +524,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             ))
             .await;
 
@@ -528,6 +544,35 @@ mod tests {
 
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("location", "/v1/devices/654".parse().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_device_create_v1_error_validation() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client
+            .device_create_v1(super::client::devices::model::Device::new(
+                "conflict".to_string(),
+                super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
+                uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
+                None,
+                None,
+                Some("e".to_string()),
+            ))
+            .await;
+
+        assert_eq!(true, result.is_err());
+
+        let error = result.unwrap_err();
+
+        assert!(matches!(error, ClientError::Error(
+            super::client::devices::endpoint::DeviceCreateV1Error::Error400(_),
+        )));
     }
 
     #[tokio::test]
@@ -623,6 +668,7 @@ mod tests {
                 updated_at: None,
                 ratio: Some(10f64),
                 custom: None,
+                limited_text: None,
             }
         ).await;
 
@@ -648,6 +694,7 @@ mod tests {
                 updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
                 ratio: Some(10f64),
                 custom: None,
+                limited_text: None,
             }
         ).await;
 
@@ -674,6 +721,7 @@ mod tests {
                 updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
                 ratio: Some(10f64),
                 custom: Some(Coordinates(0.5f64, 0.8f64)),
+                limited_text: None,
             }
         ).await;
 
@@ -701,6 +749,7 @@ mod tests {
                 updated_at: None,
                 ratio: Some(10f64),
                 custom: None,
+                limited_text: None,
             }
         ).await;
 
