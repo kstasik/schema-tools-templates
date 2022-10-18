@@ -689,10 +689,18 @@ pub mod consumer {
         ) {
             match item {
                 Ok((_, delivery)) => {
-                    let handler = delivery
-                        .properties
-                        .headers()
-                        .as_ref()
+                    let mut headers = delivery.properties.headers().clone().unwrap_or_default();
+
+                    for (k, v) in headers.clone().into_iter() {
+                        let lower_k = k.to_string().to_lowercase();
+                        if k.to_string() == lower_k {
+                            continue;
+                        }
+
+                        headers.insert(amq_protocol_types::ShortString::from(lower_k), v.clone());
+                    }
+
+                    let handler = Some(&headers)
                         .and_then(|ft| ft.inner().get_key_value("type"))
                         .and_then(|(_, value)| match value {
                             amq_protocol_types::AMQPValue::LongString(val) => Some(val),
