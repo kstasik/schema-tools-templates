@@ -59,6 +59,7 @@
 {% macro get_validation(validation) %}{% filter nospaces %}
     {% if validation.format and validation.format == "decimal" %}{% else %}
     {% if validation.maxLength %}length(max = {{ validation.maxLength }}), {% endif %}
+    {% if validation.minLength %}length(min = {{ validation.minLength }}), {% endif %}
     {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
     {% if validation.pattern %}regex="{{ validation.pattern.name | snakecase | upper }}", {% endif %}
     {% if validation.minimum is defined or validation.maximum is defined %}

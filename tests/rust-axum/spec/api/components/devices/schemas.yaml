@@ -27,3 +27,6 @@ Device:
         - type: string
           description: y coordinate
       x-type: crate::Coordinates
+    limitedText:
+      type: string
+      minLength: 10
