@@ -33,7 +33,7 @@ pub struct {{ m::model_name(name = model.object.name) }} {
     {% if m::get_validation(validation = property.validation) | length %}
     #[validate({{ m::get_validation(validation = property.validation) }})]
     {% endif %}
-    {% elif property.type != "enum" and property.model and property.model.type != "enum" %}
+    {% elif property.type != "enum" and property.model and property.model.type != "enum" and not property.x.type %}
     #[validate]
     {% endif %}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
@@ -159,7 +159,7 @@ impl Validate for {{ m::model_name(name = model.wrapper.name) }} {
     fn validate(&self) -> Result<(), validator::ValidationErrors> {
         match self {
             {% for option in model.wrapper.models -%}
-            Self::{{ m::type(property = option) }}(d) => d.validate(){% if not loop.last %},{% endif %}
+            Self::{{ m::type(property = option) }}(d) =>{% if option.type == 'enum' %}Ok(()),{% else %}d.validate(),{% endif %} 
             {% endfor %}
         }
     }
