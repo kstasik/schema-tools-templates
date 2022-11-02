@@ -5,7 +5,7 @@
 use serde::{de::{self, IntoDeserializer}, Deserialize, Serialize};
 use std::fmt;
 use reqwest::header::{HeaderName, HeaderValue};
-use super::{ClientError, ApiError};
+use super::{ClientError, ApiError, ResponseProcessingError};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -34,7 +34,7 @@ pub enum {{ endpoint.operation | pascalcase }}Error {
 }
 
 impl ApiError for {{ endpoint.operation | pascalcase }}Error {
-	fn extract(response: reqwest::Response) -> Pin<Box<dyn Future<Output = Option<Self>> + Send>> {
+	fn extract(response: reqwest::Response) -> Pin<Box<dyn Future<Output = Result<Self, ResponseProcessingError>> + Send>> {
 		Box::pin(async move {
 			match response.status().as_u16() {
 				{% for response in endpoint.responses.all  %}
@@ -43,12 +43,12 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 					let headers = response.headers().clone();
 					
 					{% if not response.models %}
-					Some(Self::Error{{ response.statusCode }}(headers))
+					Ok(Self::Error{{ response.statusCode }}(headers))
 					{% else %}
 					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
 						.await
 						.map(|d| Self::Error{{ response.statusCode }}(d, headers))
-						.ok()
+						.map_err(ResponseProcessingError::Deserialization)
 					{% endif %}
 				},
 				{% else %}
@@ -58,12 +58,12 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
 					.await
 					.map(Self::Error{{ response.statusCode }})
-					.ok(),
+					.map_err(ResponseProcessingError::Deserialization),
 					{% endif %}
 				{% endif %}
 				{% endif %}
 				{% endfor %}
-				_ => None
+				_ => Err(ResponseProcessingError::NotSupported(response))
 			}
 		})
 	}

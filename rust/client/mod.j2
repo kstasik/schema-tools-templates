@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 use reqwest::header::{HeaderName, HeaderValue};
-use super::error::{ClientError, ApiError};
+use super::error::{ClientError, ApiError, ResponseProcessingError};
 {% if "tracing" in apm %}
 use tracing::Span;
 use tracing::Instrument;

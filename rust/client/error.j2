@@ -6,32 +6,38 @@ use std::future::Future;
 use std::pin::Pin;
 
 pub trait ApiError {
-    fn extract(response: reqwest::Response) -> Pin<Box<dyn Future<Output = Option<Self>> + Send>> where Self: Sized;
+    fn extract(response: reqwest::Response) -> Pin<Box<dyn Future<Output = Result<Self, ResponseProcessingError>> + Send>> where Self: Sized;
+}
+
+#[derive(Debug)]
+pub enum ResponseProcessingError {
+    NotSupported(reqwest::Response),
+    Deserialization(reqwest::Error)
 }
 
 #[derive(Debug)]
 pub enum ClientError<T> where T: ApiError {
     Error(T),
-    ReqwestError(reqwest::Error),
-    UnsupportedError,
+    Request(reqwest::Error),
+    Response(Box<ResponseProcessingError>),
 }
 
 impl<T> ClientError<T> where T: ApiError {
     pub fn from_reqwest(reqwest: reqwest::Error) -> Self {
-        Self::ReqwestError(reqwest)
+        Self::Request(reqwest)
     }
 
     pub async fn from_response(response: reqwest::Response) -> Self {
         T::extract(response)
             .await
-            .map_or(Self::UnsupportedError, Self::Error)
+            .map_or_else(|e| Self::Response(Box::new(e)), Self::Error)
     }
 }
 
 impl<T> std::fmt::Display for ClientError<T> 
 where
     T: ApiError + std::fmt::Debug {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "api error occured: {:?}", self)
     }
 }
