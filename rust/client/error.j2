@@ -19,7 +19,7 @@ pub enum ResponseProcessingError {
 pub enum ClientError<T> where T: ApiError {
     Error(T),
     Request(reqwest::Error),
-    Response(ResponseProcessingError),
+    Response(Box<ResponseProcessingError>),
 }
 
 impl<T> ClientError<T> where T: ApiError {
@@ -30,7 +30,7 @@ impl<T> ClientError<T> where T: ApiError {
     pub async fn from_response(response: reqwest::Response) -> Self {
         T::extract(response)
             .await
-            .map_or_else(Self::Response, Self::Error)
+            .map_or_else(|e| Self::Response(Box::new(e)), Self::Error)
     }
 }
 
