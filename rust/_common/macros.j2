@@ -128,18 +128,27 @@
 
 {% macro endpoint_return(success, endpoint, headers, options) -%}{% filter nospaces %}Result<
     {% if success == "no-models" or success.contentType is not starting_with("application/json") %}
-    {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
+        {% if success.model and success.model.type == "object" and success.model.model and success.model.model.name %}
+            {{ self::endpoint_model_response(success = success, headers = headers) }}
+        {% elif success.model and success.model.type == "wrapper" and success.model.model and success.model.model.type %}
+            {{ self::endpoint_model_response(success = success, headers = headers) }}
+        {% else %}
+            {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
+        {% endif %}
     {% elif success.model %}
-    {% if headers | length > 0 %}({% endif %}
-    {{ self::type(property = success.model, ns = "model") }}
-    {% if headers | length > 0 %}, reqwest::header::HeaderMap
-    ){% endif %}
+        {{ self::endpoint_model_response(success = success, headers = headers) }}
     {% else %}
     reqwest::Response
     {% endif %},
     {{ self::endpoint_error(endpoint = endpoint, options = options) }}
 >{% endfilter %}{%- endmacro skipped_headers %}
 
+{% macro endpoint_model_response(success, headers) -%}
+    {% if headers | length > 0 %}({% endif %}
+    {{ self::type(property = success.model, ns = "model") }}
+    {% if headers | length > 0 %}, reqwest::header::HeaderMap
+    ){% endif %}
+{%- endmacro endpoint_model_response %}
 {% macro endpoint_default_response(endpoint, options) -%}endpoint::{{ endpoint.operation | pascalcase }}Response{%- endmacro endpoint_default_response %}
 
 {% macro endpoint_error(endpoint, options) -%}{% filter nospaces %}

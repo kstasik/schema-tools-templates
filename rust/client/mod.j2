@@ -181,7 +181,15 @@ impl {{ options.name }} {
                 .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
                 {% if success_headers | length > 0 %}.map(|d| (d, headers)){% endif %}
             {% else %}
-            return Ok({{ m::endpoint_default_response(endpoint = endpoint, options = options) }}::from_response(response))
+                {% if not success.model or not success.model.model or not success.model.model.name or not success.model.model.type %}
+                    return Ok({{ m::endpoint_default_response(endpoint = endpoint, options = options) }}::from_response(response))
+                {% else %}
+                    return response
+                        .json::<{{ m::type(property = success.model, ns = "model") }}>()
+                        .await
+                        .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
+                        {% if success_headers | length > 0 %}.map(|d| (d, headers)){% endif %}
+                {% endif %}
             {% endif %}
         }
 
