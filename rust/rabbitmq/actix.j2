@@ -180,6 +180,27 @@ pub mod manager {
             }
         }
     }
+
+    pub struct Healthcheck {}
+
+    #[derive(Debug)]
+    pub enum HealthcheckError {
+        NoConnection,
+    }
+
+    impl Message for Healthcheck {
+        type Result = Result<lapin::ConnectionStatus, HealthcheckError>;
+    }
+
+    impl<'a> Handler<Healthcheck> for RabbitmqManager {
+        type Result = Result<lapin::ConnectionStatus, HealthcheckError>;
+        fn handle(&mut self, _: Healthcheck, _: &mut Context<Self>) -> Self::Result {
+            match self.connection.as_ref() {
+                Some(c) => Ok(c.status().clone()),
+                None => Err(HealthcheckError::NoConnection),
+            }
+        }
+    }
 }
 
 pub mod producer {
