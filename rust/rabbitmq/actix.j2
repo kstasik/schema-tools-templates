@@ -468,6 +468,8 @@ pub mod consumer {
     pub enum Confirmation {
         Ack,
         Nack,
+        ReQueue,
+        Reject,
     }
 
     impl<O, E> Into<Confirmation> for Result<O, E> where O: Into<Confirmation>, E: Into<Confirmation> {
@@ -636,6 +638,19 @@ pub mod consumer {
                             Confirmation::Nack => {
                                 delivery
                                     .nack(lapin::options::BasicNackOptions::default())
+                                    .await
+                            }
+                            Confirmation::ReQueue => {
+                                let mut nackOptions = lapin::options::BasicNackOptions::default();
+                                nackOptions.requeue = true;
+
+                                delivery
+                                    .nack(nackOptions)
+                                    .await
+                            }
+                            Confirmation::Reject => {
+                                delivery
+                                    .reject(lapin::options::BasicRejectOptions::default())
                                     .await
                             }
                         } {
