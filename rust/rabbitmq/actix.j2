@@ -214,7 +214,8 @@ pub mod producer {
     use tracing::Span;
     use tracing::Instrument;
     {% if "opentelemetry" in apm %}
-    use opentelemetry::{propagation::TextMapPropagator, trace};
+    use super::super::{SPAN_STATUS_ERROR, SPAN_STATUS_OK};
+    use opentelemetry::propagation::TextMapPropagator;
     use opentelemetry::sdk::propagation::TraceContextPropagator;
     use tracing_opentelemetry::OpenTelemetrySpanExt;
     {% endif %}
@@ -377,16 +378,16 @@ pub mod producer {
                                 match confirm_fut.await {
                                     Ok(pub_confirm) => pub_confirm.await.map(|c| match c.is_ack() {
                                         true => {
-                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Ok.as_str());{% endif %}
+                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_OK);{% endif %}
                                             true
                                         }
                                         false => {
-                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Error.as_str());{% endif %}
+                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
                                             false
                                         }
                                     }),
                                     Err(err) => {
-                                        {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Error.as_str());{% endif %}
+                                        {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
                                         Err(err)
                                     },
                                 }
@@ -454,7 +455,7 @@ pub mod consumer {
     use tracing::Span;
     use tracing::Instrument;
     {% if "opentelemetry" in apm %}
-    use opentelemetry::trace;
+    use super::super::{SPAN_STATUS_ERROR, SPAN_STATUS_OK};
     {% endif %}
     {% endif %}
 
@@ -630,7 +631,7 @@ pub mod consumer {
                     Box::pin(async move {
                         if let Err(err) = match future.await.into() {
                             Confirmation::Ack => {
-                                {% if "tracing" in apm %}Span::current().record("otel.status_code", &trace::StatusCode::Ok.as_str());{% endif %}
+                                {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_OK);{% endif %}
                                 delivery
                                     .ack(lapin::options::BasicAckOptions::default())
                                     .await
@@ -770,7 +771,7 @@ pub mod consumer {
                             handler.call(dependency, delivery){% if "tracing" in apm %}.instrument(tracing::info_span!("handler")){% endif %}.into_actor(self).spawn(ctx);
                         }
                         None => {
-                            {% if "tracing" in apm %}span.record("otel.status_code", &trace::StatusCode::Error.as_str());{% endif %}
+                            {% if "tracing" in apm %}span.record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
                             {{ e::log(type = "error", options = options) }}("Cannot find handler for message, missing correct type header (message acked)");
 
                             async move {

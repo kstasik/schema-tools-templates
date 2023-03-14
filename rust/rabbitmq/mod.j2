@@ -1,9 +1,15 @@
 {# type=static,filename=rabbitmq/mod.rs,min_version=0.2.0 #}
 {%- import "macros.j2" as m -%}
 {{ m::do_not_modify() }}
+{% set_global apm = options.apm | default(value = []) %}
 
 use lapin::types::FieldTable;
 use serde::Serialize;
+
+{% if "opentelemetry" in apm %}
+const SPAN_STATUS_ERROR: &str = "error";
+const SPAN_STATUS_OK: &str = "ok";
+{% endif %}
 
 #[rustfmt::skip]
 #[allow(dead_code, unused_imports)]
