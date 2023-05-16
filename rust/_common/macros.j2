@@ -101,7 +101,7 @@
 {% elif property.type == "array" and property.model %}
     Vec<{{ self::type(property = property.model, ns = ns) }}>
 {% elif property.type == "map" and property.model %}
-    HashMap<String, {{ self::type(property = property.model, ns = ns) }}>
+    BTreeMap<String, {{ self::type(property = property.model, ns = ns) }}>
 {% elif property.type == "object" and property.model %}
     {% if ns %}{{ ns }}::{% endif %}{{ self::model_name(name = property.model.type) }}
 {% elif property.type == "wrapper" and property.model %}

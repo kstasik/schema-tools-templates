@@ -3,7 +3,7 @@
 {# if wrappers include #}
 {{ m::do_not_modify() }}
 use serde::{Serialize, Deserialize, Deserializer};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use validator::Validate;
 use regex::Regex;
 {% block use %}{% endblock use %}
