@@ -36,9 +36,12 @@ Pagination:
       type: integer
       minimum: 0
     pageSize:
-      type: integer
-      minimum: 0
-      enum: [5, 10, 15, 50]
+      $ref: '#/PageSize'
+
+PageSize:
+  type: integer
+  minimum: 0
+  enum: [5, 10, 15, 50]
 
 SingleResource:
   type: object

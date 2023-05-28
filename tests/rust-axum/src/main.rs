@@ -159,6 +159,23 @@ mod handler {
         })
     }
 
+    pub async fn location_get_v1(
+        _path: api::endpoint::LocationGetV1Path,
+        Extension(db): Extension<Arc<Database>>,
+    ) -> api::endpoint::LocationGetV1Response {
+        let _result = db.get_smth().await;
+
+        unreachable!()
+    }
+
+    pub async fn locations_create_v1(
+        request: api::model::Location
+    ) -> api::endpoint::LocationCreateV1Response {
+        api::endpoint::LocationCreateV1Response::Status200(
+            api::model::CreateLocation200Response::new(request)
+        )
+    }
+
     pub async fn devices_create_v1(
         request: api::model::Device,
         Extension(db): Extension<Arc<Database>>,
@@ -277,6 +294,10 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
         .accessory_log_list_v1(handler::accessory_get_log_v1)
         .accessory_get_v1(handler::accessory_get_v1);
 
+    let locations = api::service::LocationsRouter::new()
+        .location_get_v1(handler::location_get_v1)
+        .location_create_v1(handler::locations_create_v1);
+
     let health = api::service::HealthRouter::new()
         .livez_list(handler::livez_list)
         .readyz_list(handler::readyz_list);
@@ -285,6 +306,7 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
         .merge(devices)
         .merge(accessories)
         .merge(health)
+        .merge(locations)
         .layer(axum::Extension(database))
         .layer(axum::Extension(messagebus));
 
@@ -759,4 +781,85 @@ mod tests {
 
         assert_eq!(data.response.status().as_u16(), 201);
     }
+
+    #[tokio::test]
+    async fn test_locations_create_v1() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        use super::client::devices::model;
+
+        let location = model::Location {
+            location_id: "test".to_string(),
+            simple_mixed: Some(model::LocationSimpleMixedVariant::String("test".to_string())),
+            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Simple(model::KindDiscriminatorSimpleVariant {
+                name: "test".to_string(),
+            })),
+            kind_externally_tagged: Some(model::LocationKindExternallyTaggedVariant::Complex(
+                model::LocationKindExternallyTaggedComplex{
+                    name_b: "xxx".to_string(),
+                }
+            )),
+            kind_internally_tagged: Some(model::LocationKindInternallyTaggedVariant::Complex(model::KindInternallyTaggedComplexVariant {
+                name_b: "oooo".to_string(),
+            })),
+            kind_internally_tagged_inline: Some(model::LocationKindInternallyTaggedInlineVariant::Simple(
+                model::LocationKindInternallyTaggedInlineOption1Variant {
+                    name_b: "xxxx".to_string(),
+                }
+            )),
+            un_tagged: Some(model::LocationUnTaggedVariant::KindUntaggedComplexVariant(model::KindUntaggedComplexVariant {
+                name_b: "test".to_string(),
+            })),
+            un_tagged_mixed: Some(model::LocationUnTaggedMixedVariant::String("test".to_string())),
+        };
+
+        let original = serde_json::to_value(location.clone()).unwrap();
+
+        let expected: serde_json::Value = serde_json::json!({
+            "kindDiscriminator": {
+              "name": "test",
+              "testField": "simple"
+            },
+            "kindExternallyTagged": {
+              "complex": {
+                "nameB": "xxx"
+              }
+            },
+            "kindInternallyTagged": {
+              "kind": "COMPLEX",
+              "nameB": "oooo"
+            },
+            "kindInternallyTaggedInline": {
+              "kind": "SIMPLE",
+              "nameB": "xxxx"
+            },
+            "locationId": "test",
+            "simpleMixed": "test",
+            "unTagged": {
+              "nameB": "test"
+            },
+            "unTaggedMixed": "test"
+          });
+
+        // println!("original: {}", serde_json::to_string(&original).unwrap());
+
+        assert_eq!(original, expected);
+
+        let result = client.location_create_v1(
+            location,
+        ).await;
+
+        assert_eq!(result.is_err(), false);
+
+        let data = result.unwrap().data;
+
+        let original = serde_json::to_value(data).unwrap();
+
+        assert_eq!(original, expected);
+    }
+
 }
