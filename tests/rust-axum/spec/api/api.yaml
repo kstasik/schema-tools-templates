@@ -27,6 +27,18 @@ components:
       $ref: components/accessories/schemas.yaml#/Accessory
     AccessoryCreateError:
       $ref: components/accessories/schemas.yaml#/CreateAccessoryError
+    KindDiscriminatorSimple:
+      $ref: components/locations/schemas.yaml#/KindDiscriminatorSimple
+    KindDiscriminatorComplex:
+      $ref: components/locations/schemas.yaml#/KindDiscriminatorComplex
+    KindDiscriminatorSemi:
+      $ref: components/locations/schemas.yaml#/KindDiscriminatorSemi
+    KindInternallyTaggedComplex:
+      $ref: components/locations/schemas.yaml#/KindInternallyTaggedComplex
+    KindUntaggedComplex:
+      $ref: components/locations/schemas.yaml#/KindUntaggedComplex
+    Location:
+      $ref: components/locations/schemas.yaml#/Location
 
   responses:
     # common
@@ -61,6 +73,18 @@ components:
     createDevice409:
       $ref: components/devices/responses.yaml#/createDevice409
 
+    # locations
+    getLocation200:
+      $ref: components/locations/responses.yaml#/getLocation200
+    getLocation400:
+      $ref: components/locations/responses.yaml#/getLocation400
+    createLocation200:
+      $ref: components/locations/responses.yaml#/createLocation200
+    createLocation409:
+      $ref: components/locations/responses.yaml#/createLocation409
+    createLocation400:
+      $ref: components/locations/responses.yaml#/createLocation400
+
     # accessories
     getAccessory200:
       $ref: components/accessories/responses.yaml#/getAccessory200
@@ -80,6 +104,8 @@ components:
       $ref: components/devices/request-bodies.yaml#/createDevice
     createAccessory:
       $ref: components/accessories/request-bodies.yaml#/createAccessory
+    createLocation:
+      $ref: components/locations/request-bodies.yaml#/createLocation
 
   parameters:
     traceParentHeader:
@@ -98,6 +124,8 @@ components:
       $ref: components/devices/parameters.yaml#/deviceIdPath
     accessoryIdPath:
       $ref: components/accessories/parameters.yaml#/accessoryIdPath
+    locationIdPath:
+      $ref: components/locations/parameters.yaml#/locationIdPath
 
   securitySchemes:
     basicAuth:
@@ -259,3 +287,47 @@ paths:
         - $ref: '#/components/parameters/traceParentHeader'
         - $ref: '#/components/parameters/traceStateHeader'
         - $ref: '#/components/parameters/accessoryIdPath'
+
+  /v1/locations/{locationId}:
+    get:
+      tags:
+        - locations
+      description: Get all locations
+      operationId: getLocation
+      responses:
+        200:
+          $ref: '#/components/responses/getLocation200'
+        400:
+          $ref: '#/components/responses/getLocation400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/locationIdPath'
+
+  # locations
+  /v1/locations:
+    post:
+      tags:
+        - locations
+      description: Create location
+      operationId: createLocation
+      responses:
+        200:
+          $ref: '#/components/responses/createLocation200'
+        400:
+          $ref: '#/components/responses/createLocation400'
+        409:
+          $ref: '#/components/responses/createLocation409'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+      requestBody:
+        $ref: '#/components/requestBodies/createLocation'

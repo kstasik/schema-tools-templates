@@ -4,8 +4,8 @@
 {{ m::do_not_modify() }}
 use serde::{Serialize, Deserialize, Deserializer};
 use std::collections::BTreeMap;
-use validator::Validate;
-use regex::Regex;
+{% if not options.skipValidate %}use validator::Validate;
+use regex::Regex;{% endif %}
 {% block use %}{% endblock use %}
 
 {% if formats is containing("decimal") %}
@@ -15,6 +15,7 @@ use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
 {% endif %}
 
+{% if not options.skipValidate %}
 lazy_static::lazy_static! {
    static ref UUID: Regex = Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap();
    static ref FLOAT: Regex = Regex::new(r"^[0-9\.]+$").unwrap();
@@ -22,19 +23,20 @@ lazy_static::lazy_static! {
    static ref {{ regexp.name | snakecase | upper }}: Regex = Regex::new(r"{{ regexp.pattern }}").unwrap();
 {% endfor %}
 }
+{% endif %}
 
 {% for model in models %}
 {%- if model.object %}
-#[derive(Deserialize, Serialize, Debug, Validate, Clone{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
+#[derive(Deserialize, Serialize, Debug,{% if not options.skipValidate %} Validate,{% endif %} Clone{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
 pub struct {{ m::model_name(name = model.object.name) }} {
     {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") -%}
     {% for property in filtered_properties -%}
     {% if property.validation and property.type != 'enum' %}
     {% if m::get_validation(validation = property.validation) | length %}
-    #[validate({{ m::get_validation(validation = property.validation) }})]
+    {% if not options.skipValidate %}#[validate({{ m::get_validation(validation = property.validation) }})]{% endif %}
     {% endif %}
     {% elif m::need_nested_validation(property=property)%}
-    #[validate]
+    {% if not options.skipValidate %}#[validate]{% endif %}
     {% endif %}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
     pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
@@ -125,7 +127,27 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 }
 
 {%- elif model.wrapper %}
-#[derive(Debug, Clone, Serialize)]
+{% if model.wrapper.strategy == "externally" %}
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum {{ m::model_name(name = model.wrapper.name) }} {
+    {% for option in model.wrapper.models -%}
+    #[serde(rename = "{{ option.x._discriminator.property }}")]
+    {{ option.x._discriminator.property | pascalcase }}({{ option.x._discriminator.value }}),
+    {% endfor %}
+}
+
+{% elif model.wrapper.strategy.internally %}
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "{{ model.wrapper.strategy.internally }}")]
+pub enum {{ m::model_name(name = model.wrapper.name) }} {
+    {% for option in model.wrapper.models -%}
+    #[serde(rename = "{{ option.x._discriminator.value }}")]
+    {{ option.x._discriminator.value | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({{ m::type(property = option) }}){% endif %},
+    {% endfor %}
+}
+
+{% else -%}
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
@@ -133,37 +155,35 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% endfor %}
 }
 
-impl<'de> Deserialize<'de> for {{ m::model_name(name = model.wrapper.name) }} {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: Deserializer<'de> {
-        {% if model.wrapper.models | length == 1 %}
-        {% for option in model.wrapper.models -%}
-        {{ m::type(property = option) }}::deserialize(deserializer)
-            .map(|t| Self::{{ m::type(property = option) }}(t))
-        {% endfor %}
-        {% else %}
-        let data = &serde_json::Value::deserialize(deserializer)?;
-        // todo: too many extra allocations - refactor
-        {% for option in model.wrapper.models %}
-        if let Ok(result) = serde_json::from_value::<{{ m::type(property = option) }}>(data.clone()) {
-            return Ok(Self::{{ m::type(property = option) }}(result));
-        }
-        {% endfor %}
+{% endif -%}
 
-        Err(serde::de::Error::custom("Cannot deserialize wrapper"))
-        {% endif %}
-    }
-}
-
+{% if not options.skipValidate %}
+{% if model.wrapper.strategy == "externally" or model.wrapper.strategy.internally %}
 impl Validate for {{ m::model_name(name = model.wrapper.name) }} {
     fn validate(&self) -> Result<(), validator::ValidationErrors> {
         match self {
             {% for option in model.wrapper.models -%}
-            Self::{{ m::type(property = option) }}(d) =>{% if option.type == 'enum' %}Ok(()),{% else %}d.validate(),{% endif %}
+            Self::{% if model.wrapper.strategy.internally -%}
+            {{ option.x._discriminator.value | pascalcase }}
+            {%- else -%}
+            {{ option.x._discriminator.property | pascalcase }}
+            {%- endif %}{% if option.x._discriminator.properties | default(value = 0) > 0 %}(d)  => {% if option.model %}d.validate(),{% else %}Ok(()),{% endif %}{%else %} => Ok(()),{% endif %}
             {% endfor %}
         }
     }
 }
+{% else %}
+impl Validate for {{ m::model_name(name = model.wrapper.name) }} {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        match self {
+            {% for option in model.wrapper.models -%}
+            Self::{{ m::type(property = option) }}(d) => {% if option.model %}d.validate(),{% else %}Ok(()),{% endif %}
+            {% endfor %}
+        }
+    }
+}
+{% endif %}
+{% endif %}
 
 {%- elif model.primitive %}
 pub type {{ m::model_name(name = model.primitive.name) }} = {{ m::type(property = model.primitive) }};

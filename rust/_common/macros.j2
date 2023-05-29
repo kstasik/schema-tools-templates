@@ -22,6 +22,8 @@
     {{ name  }}
 {% endfilter %}{% endmacro model_name %}
 
+{% macro is_primitive(type) %}{% filter nospaces %}{% endfilter %}{% endmacro is_primitive %}
+
 {% macro to_string(q, required, name='') %}{% filter nospaces %}
 {% if name != "" %}
 {% set real_name = name -%}

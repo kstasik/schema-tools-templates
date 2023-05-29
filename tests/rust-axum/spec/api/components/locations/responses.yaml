@@ -1,0 +1,154 @@
+# get
+getLocation200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: GetLocationResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Location
+
+getLocation400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
+# list
+listLocations200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: ListLocationsResponse
+        allOf:
+          - $ref: ../../types.yaml#/MultipleResources
+          - properties:
+              data:
+                type: array
+                items:
+                  $ref: schemas.yaml#/Location
+
+listLocations400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
+# get
+getLocation200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: GetLocationResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Location
+
+createLocation200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: GetLocationResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Location
+
+createLocation400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'already-exists', 'validation-error' ]
+
+createLocation409:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+    location:
+      required: true
+      schema:
+        type: string

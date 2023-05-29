@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 use reqwest::header::{HeaderName, HeaderValue};
 use super::error::{ClientError, ApiError, ResponseProcessingError};
+use std::collections::BTreeMap;
 {% if "tracing" in apm %}
 use tracing::Span;
 use tracing::Instrument;
@@ -124,7 +125,7 @@ impl {{ options.name }} {
 
         {{ e::endpoint_block(endpoint=endpoint, options=options) }}
         
-        let response = {% if "tracing" in apm %}async move { {%- endif %}
+        let response = {% if "tracing" in apm %}async move { {% endif -%}
             {% if qs == "serde_qs" %}let{%- if endpoint.parameters.query | length > 0 %} mut{% endif %} req = {% endif %}request
                 {%- if endpoint.parameters.query | length > 0 and qs == "urlencoded" %}
                 .query(&query)
@@ -162,7 +163,7 @@ impl {{ options.name }} {
                 })
                 {%- endif %}
                 .map_err(|e| {
-                    {% if "tracing" in apm %}tracing::error!("reqwest failed(): {}", e);{% endif %}
+                    {%- if "tracing" in apm %}tracing::error!("reqwest failed(): {}", e);{% endif %}
                     {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }}
                 })
         {% if "tracing" in apm -%}

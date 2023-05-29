@@ -12,6 +12,7 @@ use std::pin::Pin;
     use chrono::{DateTime, Utc};
 {% endif %}
 
+
 {% for tag in tags %}
 {% set allowed_operations = e::allowed_operations(endpoints=tag.endpoints, options=options) | split(pat=" ") %}
 {% set filtered_endpoints = tag.endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
