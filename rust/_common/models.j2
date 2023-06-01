@@ -127,7 +127,7 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 }
 
 {%- elif model.wrapper %}
-{% if model.wrapper.strategy == "externally" %}
+{% if model.wrapper.strategy and model.wrapper.strategy == "externally" %}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
@@ -158,7 +158,7 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
 {% endif -%}
 
 {% if not options.skipValidate %}
-{% if model.wrapper.strategy == "externally" or model.wrapper.strategy.internally %}
+{% if model.wrapper.strategy and model.wrapper.strategy == "externally" or model.wrapper.strategy.internally %}
 impl Validate for {{ m::model_name(name = model.wrapper.name) }} {
     fn validate(&self) -> Result<(), validator::ValidationErrors> {
         match self {

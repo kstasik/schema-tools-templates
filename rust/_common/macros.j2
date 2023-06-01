@@ -59,7 +59,7 @@
 {% endfilter %}{% endmacro enum_variant %}
 
 {% macro get_validation(validation) %}{% filter nospaces %}
-    {% if validation.format and validation.format == "decimal" %}{% else %}
+    {% if validation.format and validation.format in ["decimal", "uuid"] %}{% else %}
     {% if validation.maxLength %}length(max = {{ validation.maxLength }}), {% endif %}
     {% if validation.minLength %}length(min = {{ validation.minLength }}), {% endif %}
     {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
