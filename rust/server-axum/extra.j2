@@ -45,14 +45,14 @@ super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
                     {%- if endpoint.parameters.path | length > 0 %}
                     let path = match req.extract::<{{ extract }}::Path::<super::endpoint::{{ endpoint.operation | pascalcase }}Path>>().await {
                         Ok(value) => value,
-                        Err(err) => return err.into_response(),	
+                        Err(err) => return err.into_response(),
                     };
                     {%- endif %}
 
                     {%- if endpoint.parameters.query | length > 0 %}
                     let query = match req.extract::<{% if qs == "serde_qs" %}super::qs::Query{% else %}{{ extract }}::Query{% endif %}::<super::endpoint::{{ endpoint.operation | pascalcase }}Query>>().await {
                         Ok(value) => value,
-                        Err(err) => return err.into_response(),	
+                        Err(err) => return err.into_response(),
                     };
                     {%- endif %}
 
@@ -63,7 +63,7 @@ super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
                     {%- if endpoint.requestbody.models.default -%}
                     let body = match req.extract::<{% if extract == 'axum::extract' %}axum::{% else %}{{ extract }}::{% endif %}Json::<super::model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }}>>().await {
                         Ok(value) => value,
-                        Err(err) => return err.into_response(),	
+                        Err(err) => return err.into_response(),
                     };
                     {%- endif %}
                     {%- endif %}
