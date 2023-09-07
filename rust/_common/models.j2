@@ -151,7 +151,7 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
 #[serde(untagged)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
-    {{ m::type(property = option) }}({{ m::type(property = option) }}),
+    {{ m::type(property = option) | pascalcase }}({{ m::type(property = option) }}),
     {% endfor %}
 }
 
@@ -177,7 +177,7 @@ impl Validate for {{ m::model_name(name = model.wrapper.name) }} {
     fn validate(&self) -> Result<(), validator::ValidationErrors> {
         match self {
             {% for option in model.wrapper.models -%}
-            Self::{{ m::type(property = option) }}(d) => {% if option.model %}d.validate(),{% else %}Ok(()),{% endif %}
+            Self::{{ m::type(property = option) | pascalcase }}(d) => {% if option.model %}d.validate(),{% else %}Ok(()),{% endif %}
             {% endfor %}
         }
     }
