@@ -52,6 +52,11 @@ Location:
           properties:
             complex:
               $ref: '#/KindExternallyTaggedComplex'
+        - type: object
+          required: ['mixed']
+          properties:
+            mixed:
+              type: string
 
     # internally tagged autodetection
     kindInternallyTagged:
