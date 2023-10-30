@@ -49,7 +49,11 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 					{% if not response.models %}
 					Ok(Self::Error{{ response.statusCode }}(headers))
 					{% else %}
+					{% if response.models.default.contentType == "text/plain" and response.models.default.model.type == "string" %}
+					response.text()
+					{% else %}
 					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
+					{% endif %}
 						.await
 						.map(|d| Self::Error{{ response.statusCode }}(d, headers))
 						.map_err(ResponseProcessingError::Deserialization)
@@ -59,7 +63,11 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 					{% if not response.models %}
 					Some(Self::Error{{ response.statusCode }}),
 					{% else %}
+					{% if response.models.default.contentType == "text/plain" and response.models.default.model.type == "string" %}
+					response.text()
+					{% else %}
 					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
+					{% endif %}
 					.await
 					.map(Self::Error{{ response.statusCode }})
 					.map_err(ResponseProcessingError::Deserialization),

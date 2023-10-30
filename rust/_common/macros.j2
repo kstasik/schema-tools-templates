@@ -1,12 +1,12 @@
 {% macro property_name(name) %}{% filter nospaces %}
-    {{ name | replace(from="-", to="") | snakecase }}
+    {{ name | replace(from="-", to="") | when_numeric(prefix="n") | snakecase }}
 
     {% if name | snakecase in [
         "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
         "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait",
         "true", "type", "unsafe", "use", "where", "while", "async", "await", "dyn",
         "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
-        "unsized", "virtual", "yield", "try"
+        "unsized", "virtual", "yield", "try", "result"
     ] %}_{% endif %}
 {% endfilter %}{% endmacro property_name %}
 
@@ -55,7 +55,7 @@
 {% endfilter %}{% endmacro to_str %}
 
 {% macro enum_variant(name, base) %}{% filter nospaces %}
-    {{ name | pascalcase | when_numeric(prefix=base) }}
+{{ name | pascalcase | when_numeric(prefix=base) }}
 {% endfilter %}{% endmacro enum_variant %}
 
 {% macro get_validation(validation) %}{% filter nospaces %}

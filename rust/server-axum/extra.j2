@@ -57,7 +57,10 @@ super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
                     {%- endif %}
 
                     {%- if filtered_headers | length > 0 %}
-                    // todo: let headers = <super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders as actix_web::FromRequest>::extract(&req);
+                    let headers = match super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders::try_from(req.headers()) {
+                        Ok(value) => value,
+                        Err(err) => return err.into_response(),
+                    };
                     {% endif %}
 
                     {%- if endpoint.requestbody.models.default -%}
@@ -75,5 +78,5 @@ super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
 {%- if endpoint.parameters.path | length > 0 -%}, path.0{%- endif -%}
 {%- if endpoint.parameters.query | length > 0 -%}, query.0{%- endif %}
 {%- if endpoint.requestbody.models.default -%}, body.0{%- endif -%}
-{%- if filtered_headers | length > 0 -%}, headers.0{%- endif -%}
+{%- if filtered_headers | length > 0 -%}, headers{%- endif -%}
 {%- endmacro handler_definition_parameters %}
