@@ -22,5 +22,5 @@ ServiceStatus:
 
 Status:
   type: string
-  enum: ['UP', 'DOWN']
+  enum: ['UP', 'DOWN', '1N']
   default: 'DOWN'

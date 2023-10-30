@@ -63,6 +63,22 @@ pub struct {{ endpoint.operation | pascalcase }}RequestHeaders{
 	{% endfor %}
 }
 
+impl TryFrom<&axum::http::HeaderMap> for {{ endpoint.operation | pascalcase }}RequestHeaders {
+    type Error = StatusCode;
+
+    fn try_from(value: &axum::http::HeaderMap) -> Result<Self, Self::Error> {
+        Ok(Self {
+            {% for param in filtered_headers %}
+            {{ m::property_name(name = param.name) }}: value.get("{{ param.name }}")
+                .map(|hv| hv.to_str())
+                .map_or(Ok(None), |v| v.map(Some))
+                .map_err(|_| StatusCode::BAD_REQUEST)?
+                .map(|s| s.to_string())
+                {% if param.required %}.ok_or(StatusCode::BAD_REQUEST)?{% endif %},
+            {% endfor %}
+        })
+    }
+}
 {% endif -%}
 
 {% for response in endpoint.responses.all %}
