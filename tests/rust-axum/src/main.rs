@@ -27,16 +27,18 @@ pub struct Coordinates (pub f64, pub f64);
 mod api;
 mod client;
 mod handler {
-    use std::sync::Arc;
+    
 
-    use axum::Extension;
+    use axum::{Json};
+    use axum::extract::{Path, State};
     use uuid::uuid;
     use validator::Validate;
 
-    use crate::{api, Database, MessageBus};
+    use crate::{api, AppState};
+    use crate::api::qs::{NestedQuery};
 
-    pub async fn livez_list(db: Extension<Arc<Database>>) -> api::endpoint::LivezListResponse {
-        let _result = db.get_smth().await;
+    pub async fn livez_list(State(state): State<AppState>) -> api::endpoint::LivezListResponse {
+        let _result = state.database.get_smth().await;
 
         api::endpoint::LivezListResponse::Status200(api::model::ServiceStatus {
             status: api::model::ServiceStatusStatusVariant::Up,
@@ -44,8 +46,8 @@ mod handler {
         })
     }
 
-    pub async fn readyz_list(db: Extension<Arc<Database>>) -> api::endpoint::ReadyzListResponse {
-        let _result = db.get_smth().await;
+    pub async fn readyz_list(State(state): State<AppState>) -> api::endpoint::ReadyzListResponse {
+        let _result = state.database.get_smth().await;
 
         api::endpoint::ReadyzListResponse::Status200(api::model::ServiceStatus {
             status: api::model::ServiceStatusStatusVariant::Up,
@@ -54,13 +56,13 @@ mod handler {
     }
 
     pub async fn devices_list_v1(
-        query: api::endpoint::DevicesListV1Query,
-        Extension(db): Extension<Arc<Database>>,
-    ) -> Result<api::model::ListDevices200Response, api::model::ListDevices400Response> {
-        let _result = db.get_smth().await;
+        NestedQuery(query): NestedQuery<api::endpoint::DevicesListV1Query>,
+        State(state): State<AppState>,
+    ) -> Result<Json<api::model::ListDevices200Response>, Json<api::model::ListDevices400Response>> {
+        let _result = state.database.get_smth().await;
 
         if query.for_.map(|f| f.eq("test")).unwrap_or(false) {
-            return Ok(api::model::ListDevices200Response {
+            return Ok(Json(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -74,7 +76,7 @@ mod handler {
                     None,
                     None,
                 )],
-            });
+            }));
         }
 
         if query
@@ -88,7 +90,7 @@ mod handler {
             })
             .unwrap_or(false)
         {
-            return Ok(api::model::ListDevices200Response {
+            return Ok(Json(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -102,9 +104,9 @@ mod handler {
                     None,
                     None,
                 )],
-            });
+            }));
         } else if query.page.unwrap_or(0) == 2 {
-            return Ok(api::model::ListDevices200Response {
+            return Ok(Json(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -118,23 +120,23 @@ mod handler {
                     None,
                     None,
                 )],
-            });
+            }));
         }
 
-        Ok(api::model::ListDevices200Response {
+        Ok(Json(api::model::ListDevices200Response {
             pagination: api::model::Pagination::new(
                 1,
                 api::model::PaginationPageSizeVariant::PaginationPageSize10,
             ),
             data: vec![],
-        })
+        }))
     }
 
     pub async fn devices_get_v1(
-        path: api::endpoint::DeviceGetV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        Path(path): Path<api::endpoint::DeviceGetV1Path>,
+        State(state): State<AppState>,
     ) -> api::endpoint::DeviceGetV1Response {
-        let _result = db.get_smth().await;
+        let _result = state.database.get_smth().await;
 
         if path.device_id.eq("missing") {
             return api::endpoint::DeviceGetV1Response::Status400(
@@ -159,27 +161,28 @@ mod handler {
         })
     }
 
+
     pub async fn location_get_v1(
-        _path: api::endpoint::LocationGetV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        Path(_path): Path<api::endpoint::LocationGetV1Path>,
+        State(state): State<AppState>,
     ) -> api::endpoint::LocationGetV1Response {
-        let _result = db.get_smth().await;
+        let _result = state.database.get_smth().await;
 
         unreachable!()
     }
 
     pub async fn locations_create_v1(
-        request: api::model::Location
+        Json(request): Json<api::model::Location>
     ) -> api::endpoint::LocationCreateV1Response {
         api::endpoint::LocationCreateV1Response::Status200(
             api::model::CreateLocation200Response::new(request)
         )
     }
 
+
     pub async fn devices_create_v1(
-        request: api::model::Device,
-        Extension(db): Extension<Arc<Database>>,
-        Extension(bus): Extension<Arc<MessageBus>>,
+        State(state): State<AppState>,
+        Json(request): Json<api::model::Device>,
     ) -> api::endpoint::DeviceCreateV1Response {
         if let Err(_) = request.validate() {
             return api::endpoint::DeviceCreateV1Response::Status400(
@@ -191,8 +194,8 @@ mod handler {
             )
         }
 
-        let _result = db.get_smth().await;
-        let _result2 = bus.send().await;
+        let _result = state.database.get_smth().await;
+        let _result2 = state.messagebus.send().await;
 
         if request.device_id == "conflict" {
             api::endpoint::DeviceCreateV1Response::Status409(
@@ -206,7 +209,7 @@ mod handler {
     }
 
     pub async fn accessory_create_v1(
-        data: api::model::Accessory,
+        Json(data): Json<api::model::Accessory>,
     ) -> api::endpoint::AccessoryCreateV1Response {
         match data.accessory_id.as_str() {
             "conflict" => api::endpoint::AccessoryCreateV1Response::Status409(
@@ -234,8 +237,8 @@ mod handler {
     }
 
     pub async fn accessory_get_v1(
-        path: api::endpoint::AccessoryGetV1Path,
-        Extension(_db): Extension<Arc<Database>>,
+        Path(path): Path<api::endpoint::AccessoryGetV1Path>,
+        State(_state): State<AppState>,
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
             return api::endpoint::AccessoryGetV1Response::Status400(
@@ -266,8 +269,8 @@ mod handler {
     }
 
     pub async fn accessory_get_log_v1(
-        _path: api::endpoint::AccessoryLogListV1Path,
-        Extension(_db): Extension<Arc<Database>>,
+        Path(_path): Path<api::endpoint::AccessoryLogListV1Path>,
+        State(_state): State<AppState>,
     ) -> api::endpoint::AccessoryLogListV1Response {
         api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
     }
@@ -279,6 +282,12 @@ async fn main() {
     let messagebus = Arc::new(MessageBus {});
 
     run_server(database, messagebus, 8080).await
+}
+
+#[derive(Clone)]
+struct AppState {
+    database: Arc<Database>,
+    messagebus: Arc<MessageBus>
 }
 
 async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: u16) {
@@ -302,18 +311,23 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
         .livez_list(handler::livez_list)
         .readyz_list(handler::readyz_list);
 
+    let state = AppState {
+        database,
+        messagebus,
+    };
+
     let app = axum::Router::new()
         .merge(devices)
         .merge(accessories)
         .merge(health)
         .merge(locations)
-        .layer(axum::Extension(database))
-        .layer(axum::Extension(messagebus));
+        .with_state(state);
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .unwrap()
+        .unwrap();
+
+    axum::serve(listener, app).await.unwrap()
 }
 
 #[cfg(test)]
