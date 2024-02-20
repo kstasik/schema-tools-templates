@@ -2,13 +2,30 @@
 {%- import "macros.j2" as m -%}
 {%- import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
-use axum::{body::{Body, BoxBody}, http::{Response, StatusCode, HeaderValue}, Json, response::IntoResponse};
-use serde::{de::{self, IntoDeserializer}, Deserialize};
+use async_trait::async_trait;
+use axum::{body::Body, http::{HeaderValue, Response, StatusCode}, response::IntoResponse, Json, http};
+use serde::{
+    de::{self, IntoDeserializer},
+    Deserialize,
+};
+use serde_qs::Error;
 use std::fmt;
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 use validator::Validate;
 
 {% set_global froms = [] %}
 {% set_global froms_with_headers = [] %}
+
+
+#[derive(Debug)]
+pub struct FailedToDeserializeQuery(Error);
+
+impl IntoResponse for FailedToDeserializeQuery {
+    fn into_response(self) -> axum::response::Response {
+        (http::StatusCode::BAD_REQUEST, self.0.to_string()).into_response()
+    }
+}
 
 {% for tag in tags -%}
 {%- for endpoint in tag.endpoints -%}
@@ -122,8 +139,14 @@ pub enum {{ endpoint.operation | pascalcase }}Response {
 	{% endfor %}
 }
 
-impl From<{{ endpoint.operation | pascalcase }}Response> for Response<BoxBody> {
-    fn from(response: {{ endpoint.operation | pascalcase }}Response) -> Response<BoxBody> {
+impl IntoResponse for {{ endpoint.operation | pascalcase }}Response {
+    fn into_response(self) -> axum::response::Response {
+        self.into()
+    }
+}
+
+impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
+    fn from(response: {{ endpoint.operation | pascalcase }}Response) -> Response<Body> {
 			match response {
 				{% for response in endpoint.responses.all %}
                 {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}

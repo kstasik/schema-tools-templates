@@ -6,37 +6,39 @@ use std::{pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use axum::{
-    extract::{rejection::QueryRejection, FromRequest, RequestParts},
+    extract::{rejection::QueryRejection, FromRequest, Request},
     http,
     response::{IntoResponse, Response},
-    BoxError
+    BoxError,
 };
 use serde::de::{self, DeserializeOwned};
 use serde_qs::Error;
 use std::ops::Deref;
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Query<T>(pub T);
+pub struct NestedQuery<T>(pub T);
 
 #[async_trait]
-impl<T, B> FromRequest<B> for Query<T>
-where
-    T: DeserializeOwned,
-    B: Send,
+impl<T, S> FromRequestParts<S> for NestedQuery<T>
+    where
+        T: DeserializeOwned,
+        S: Send + Sync,
 {
     type Rejection = FailedToDeserializeQueryStringRejection;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let query = req.uri().query().unwrap_or_default();
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let query = parts.uri.query().unwrap_or_default();
 
-        let value = serde_qs::from_str::<T>(query)
-            .map_err(FailedToDeserializeQueryStringRejection)?;
+        let value =
+            serde_qs::from_str::<T>(query).map_err(FailedToDeserializeQueryStringRejection)?;
 
-        Ok(Query(value))
+        Ok(NestedQuery(value))
     }
 }
 
-impl<T> Deref for Query<T> {
+impl<T> Deref for NestedQuery<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
