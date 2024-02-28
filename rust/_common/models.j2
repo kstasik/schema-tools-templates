@@ -38,7 +38,7 @@ pub struct {{ m::model_name(name = model.object.name) }} {
     {% elif m::need_nested_validation(property=property)%}
     {% if not options.skipValidate %}#[validate]{% endif %}
     {% endif %}
-    #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
+    #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable", skip_serializing_if = "Option::is_none"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
     pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
     {%- endfor %}
 }
