@@ -377,7 +377,6 @@ pub mod producer {
                                     props,
                                 ).await {
                                     Ok(pub_confirm) => {
-                                        // Now we wait for the publisher confirm
                                         match pub_confirm.await {
                                             Ok(confirm) => match confirm.is_ack() {
                                                 true => {
@@ -742,13 +741,14 @@ pub mod consumer {
                         headers.insert(amq_protocol_types::ShortString::from(lower_k), v.clone());
                     }
 
-                    let handler = Some(&headers)
+                    let msg_type = Some(&headers)
                         .and_then(|ft| ft.inner().get_key_value("type"))
                         .and_then(|(_, value)| match value {
                             amq_protocol_types::AMQPValue::LongString(val) => Some(val),
                             _ => None,
-                        })
-                        .and_then(|type_header| self.handlers.get(&type_header.to_string()));
+                        });
+
+                    let handler = msg_type.and_then(|type_header| self.handlers.get(&type_header.to_string()));
 
                     {% if "tracing" in apm %}
                     let span = tracing::info_span!(
@@ -777,7 +777,12 @@ pub mod consumer {
                         }
                         None => {
                             {% if "tracing" in apm %}span.record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
-                            {{ e::log(type = "error", options = options) }}("Cannot find handler for message, missing correct type header (message acked)");
+
+                            let error_message = match msg_type {
+                                Some(type_val) => format!("Cannot find handler for message with type '{}', missing correct type header (message acked)", type_val.to_string()),
+                                None => String::from("Cannot find handler for message, missing type header (message acked)"),
+                            };
+                            {{ e::log(type = "error", options = options) }}("{}", error_message);
 
                             async move {
                                 if let Err(err) = delivery

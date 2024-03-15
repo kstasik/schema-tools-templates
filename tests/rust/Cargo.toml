@@ -22,9 +22,9 @@ validator = { version = "0.16", features = ["derive"] }
 lazy_static = "1.4.0"
 
 # messages
-lapin = { version = "1.9.0" }
+lapin = { version = "2.3.1" }
 chrono = "0.4"
-amq-protocol-types = "6.1.0"
+amq-protocol-types = "7.1.2"
 actix = "0.13"
 actix-rt = "2.5"
 backoff = "0.4"

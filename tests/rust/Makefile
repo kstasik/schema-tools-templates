@@ -2,7 +2,7 @@
 
 API_VERSION := $(shell cat spec/api/api.yaml | grep '^  version' | cut -d' ' -f4)
 
-SCHEMATOOLS_VERSION := v0.6.0
+SCHEMATOOLS_VERSION := v0.18.1
 SCHEMATOOLS_BIN = dependencies/schematools-$(SCHEMATOOLS_VERSION)
 FORMAT =
 SCHEMATOOLS_PLATFORM =
