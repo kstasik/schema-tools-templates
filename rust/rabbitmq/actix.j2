@@ -5,6 +5,7 @@
 {% set_global apm = options.apm | default(value = []) %}
 
 pub mod manager {
+    use std::sync::Arc;
     use actix::*;
     use backoff::backoff::Backoff;
     use backoff::ExponentialBackoff;
@@ -13,7 +14,7 @@ pub mod manager {
     pub struct RabbitmqManager {
         uri: String,
         backoff: ExponentialBackoff,
-        connection: Option<Connection>,
+        connection: Option<Arc<Connection>>,
     }
 
     impl Supervised for RabbitmqManager {}
@@ -41,7 +42,7 @@ pub mod manager {
                 .into_actor(self)
                 .map(|res, act, ctx| match res {
                     Ok(connection) => {
-                        act.connection = Some(connection);
+                        act.connection = Some(Arc::new(connection));
                         act.backoff.reset();
                     }
                     Err(err) => {
@@ -78,10 +79,11 @@ pub mod manager {
         type Result = ResponseActFuture<Self, Result<lapin::Consumer, CreateConsumerError>>;
 
         fn handle(&mut self, msg: CreateConsumer, _: &mut Context<Self>) -> Self::Result {
-            match self.connection.as_ref().map(|c| c.create_channel()) {
-                Some(ch_fut) => Box::pin(
+            let connection_clone = self.connection.clone();
+            match connection_clone{
+                Some(connection) => Box::pin(
                     async move {
-                        match ch_fut.await {
+                        match connection.create_channel().await {
                             Ok(channel) => {
                                 if let Err(err) = channel
                                     .basic_qos(
@@ -91,7 +93,6 @@ pub mod manager {
                                     .await
                                 {
                                     {{ e::log(type = "error", options = options) }}("Connot set qos on the channel: {}", err);
-
                                     return Err(err);
                                 }
 
@@ -102,7 +103,7 @@ pub mod manager {
                                             "rust-actix-consumer {:?}",
                                             std::thread::current().id()
                                         )
-                                        .as_str(),
+                                            .as_str(),
                                         lapin::options::BasicConsumeOptions::default(),
                                         amq_protocol_types::FieldTable::default(),
                                     )
@@ -110,21 +111,20 @@ pub mod manager {
                             }
                             Err(err) => {
                                 {{ e::log(type = "error", options = options) }}("Connot create channel: {}", err);
-
                                 Err(err)
                             }
                         }
                     }
-                    .into_actor(self)
-                    .map(move |res, act, ctx| {
-                        res.map_err(|err| {
-                            if let Some(timeout) = act.backoff.next_backoff() {
-                                ctx.run_later(timeout, |_, ctx| ctx.stop());
-                            }
+                        .into_actor(self)
+                        .map(move |res, act, ctx| {
+                            res.map_err(|err| {
+                                if let Some(timeout) = act.backoff.next_backoff() {
+                                    ctx.run_later(timeout, |_, ctx| ctx.stop());
+                                }
 
-                            return CreateConsumerError::Lapin(err);
-                        })
-                    }),
+                                return CreateConsumerError::Lapin(err);
+                            })
+                        }),
                 ),
                 None => {
                     Box::pin(async move { Err(CreateConsumerError::NotReady) }.into_actor(self))
@@ -136,7 +136,7 @@ pub mod manager {
     pub struct CreateChannel;
 
     impl Message for CreateChannel {
-        type Result = Result<lapin::Channel, CreateChannelError>;
+        type Result = Result<Arc<lapin::Channel>, CreateChannelError>;
     }
 
     #[derive(Debug)]
@@ -146,38 +146,36 @@ pub mod manager {
     }
 
     impl Handler<CreateChannel> for RabbitmqManager {
-        type Result = ResponseActFuture<Self, Result<lapin::Channel, CreateChannelError>>;
+        type Result = ResponseActFuture<Self, Result<Arc<lapin::Channel>, CreateChannelError>>;
 
         fn handle(&mut self, _: CreateChannel, _: &mut Context<Self>) -> Self::Result {
-            match self.connection.as_ref().map(|c| c.create_channel()) {
-                Some(cr_fut) => Box::pin(
-                    async move {
-                        let ch = cr_fut.await.map_err(|err| err);
-                        match ch {
-                            Ok(ch) => {
-                                if let Err(err) =
-                                    ch.confirm_select(ConfirmSelectOptions::default()).await
-                                {
-                                    return Err(err);
-                                }
-                                Ok(ch)
-                            }
-                            Err(err) => Err(err),
-                        }
-                    }
-                    .into_actor(self)
-                    .map(move |res, act, ctx| {
-                        res.map_err(|err| {
-                            if let Some(timeout) = act.backoff.next_backoff() {
-                                ctx.run_later(timeout, |_, ctx| ctx.stop());
-                            }
+            let connection_clone = self.connection.clone();
 
-                            return CreateChannelError::Lapin(err);
-                        })
-                    }),
-                ),
-                None => Box::pin(async move { Err(CreateChannelError::NotReady) }.into_actor(self)),
+            let fut = async move {
+                match connection_clone {
+                    Some(connection) => {
+                        match connection.create_channel().await {
+                            Ok(channel) => {
+                                match channel.confirm_select(ConfirmSelectOptions::default()).await {
+                                    Ok(_) => Ok(Arc::new(channel)),
+                                    Err(err) => Err(CreateChannelError::Lapin(err)),
+                                }
+                            },
+                            Err(err) => Err(CreateChannelError::Lapin(err)),
+                        }
+                    },
+                    None => Err(CreateChannelError::NotReady),
+                }
             }
+                .into_actor(self)
+                .map(|res, _act, _ctx| {
+                    match res {
+                        Ok(channel) => Ok(channel),
+                        Err(err) => Err(err),
+                    }
+                });
+
+            Box::pin(fut)
         }
     }
 
@@ -204,6 +202,7 @@ pub mod manager {
 }
 
 pub mod producer {
+    use std::sync::Arc;
     use actix::*;
     use backoff::backoff::Backoff;
     use backoff::ExponentialBackoff;
@@ -224,7 +223,7 @@ pub mod producer {
     pub struct Producer {
         manager: Addr<RabbitmqManager>,
         backoff: ExponentialBackoff,
-        channel: Option<lapin::Channel>,
+        channel: Option<Arc<lapin::Channel>>,
         exchange: String,
     }
 
@@ -360,39 +359,49 @@ pub mod producer {
 
             let props = lapin::BasicProperties::default().with_headers({% if "opentelemetry" in apm %}headers{% else %}meta.into(){% endif %});
             let body = serde_json::json!(payload);
+
+            let exchange = self.exchange.clone();
+            let routing_key = routing_key.to_owned();
+
             match serde_json::to_vec(&body) {
                 Ok(serialized) => {
-                    let confirm_fut = self.channel.as_ref().map(|s| {
-                        s.basic_publish(
-                            self.exchange.as_str(),
-                            routing_key,
-                            lapin::options::BasicPublishOptions::default(),
-                            serialized,
-                            props,
-                        )
-                    });
-
-                    match confirm_fut {
-                        Some(confirm_fut) => Box::pin(
-                            async move {
-                                match confirm_fut.await {
-                                    Ok(pub_confirm) => pub_confirm.await.map(|c| match c.is_ack() {
-                                        true => {
-                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_OK);{% endif %}
-                                            true
+                    let channel = self.channel.clone();
+                    Box::pin(
+                        async move {
+                            if let Some(channel) = channel {
+                                match channel.basic_publish(
+                                    &exchange,
+                                    &routing_key,
+                                    lapin::options::BasicPublishOptions::default(),
+                                    &serialized,
+                                    props,
+                                ).await {
+                                    Ok(pub_confirm) => {
+                                        // Now we wait for the publisher confirm
+                                        match pub_confirm.await {
+                                            Ok(confirm) => match confirm.is_ack() {
+                                                true => {
+                                                    {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_OK);{% endif %}
+                                                    Ok(true)
+                                                },
+                                                false => {
+                                                    {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
+                                                    Ok(false)
+                                                },
+                                            },
+                                            Err(err) => {
+                                                {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
+                                                Err(SendError::Lapin(err))
+                                            },
                                         }
-                                        false => {
-                                            {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
-                                            false
-                                        }
-                                    }),
-                                    Err(err) => {
-                                        {% if "tracing" in apm %}Span::current().record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
-                                        Err(err)
                                     },
+                                    Err(err) => Err(SendError::Lapin(err)),
                                 }
+                            } else {
+                                Err(SendError::NotReady)
                             }
-                            {% if "tracing" in apm %}.instrument(tracing::info_span!("handler")){% endif %}
+                        }
+                            .instrument(tracing::info_span!("handler"))
                             .into_actor(self)
                             .map(move |res, act, ctx| {
                                 res.map_err(|err| {
@@ -402,16 +411,12 @@ pub mod producer {
                                         ctx.run_later(timeout, |_, ctx| ctx.stop());
                                     }
 
-                                    return SendError::Lapin(err);
+                                    err
                                 })
                             }),
-                        ),
-                        None => Box::pin(async move { Err(SendError::NotReady) }.into_actor(self)),
-                    }
-                }
-                Err(_) => Box::pin(
-                    async move { Err(SendError::SerdeSerializationError) }.into_actor(self),
-                ),
+                    )
+                },
+                Err(_) => Box::pin(async { Err(SendError::SerdeSerializationError) }.into_actor(self)),
             }
         }
     }
@@ -714,18 +719,18 @@ pub mod consumer {
         }
     }
 
-    impl<T> StreamHandler<Result<(lapin::Channel, lapin::message::Delivery), lapin::Error>>
+    impl<T> StreamHandler<Result<lapin::message::Delivery, lapin::Error>>
         for ConsumerHandle<T>
     where
         T: Unpin + Clone + 'static,
     {
         fn handle(
             &mut self,
-            item: Result<(lapin::Channel, lapin::message::Delivery), lapin::Error>,
+            item: Result<lapin::message::Delivery, lapin::Error>,
             ctx: &mut Self::Context,
         ) {
             match item {
-                Ok((_, delivery)) => {
+                Ok(delivery) => {
                     let mut headers = delivery.properties.headers().clone().unwrap_or_default();
 
                     for (k, v) in headers.clone().into_iter() {
@@ -743,7 +748,7 @@ pub mod consumer {
                             amq_protocol_types::AMQPValue::LongString(val) => Some(val),
                             _ => None,
                         })
-                        .and_then(|type_header| self.handlers.get(type_header.as_str()));
+                        .and_then(|type_header| self.handlers.get(&type_header.to_string()));
 
                     {% if "tracing" in apm %}
                     let span = tracing::info_span!(
@@ -813,8 +818,8 @@ pub mod consumer {
                 .into_actor(self)
                 .map(|res, act, ctx| match res {
                     Ok(res) => match res {
-                        Ok(channel) => {
-                            ctx.add_stream(channel);
+                        Ok(consumer) => {
+                            ctx.add_stream(consumer);
                             act.backoff.reset();
                         }
                         Err(err) => {
