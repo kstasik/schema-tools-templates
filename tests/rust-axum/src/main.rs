@@ -1,3 +1,4 @@
+use axum::Extension;
 use serde::{Deserialize, Serialize};
 
 use std::{net::SocketAddr, sync::Arc};
@@ -29,13 +30,11 @@ mod client;
 mod handler {
     
 
-    use axum::{Json};
-    use axum::extract::{Path, State};
+    use axum::extract::State;
     use uuid::uuid;
     use validator::Validate;
 
     use crate::{api, AppState};
-    use crate::api::qs::{NestedQuery};
 
     pub async fn livez_list(State(state): State<AppState>) -> api::endpoint::LivezListResponse {
         let _result = state.database.get_smth().await;
@@ -56,13 +55,13 @@ mod handler {
     }
 
     pub async fn devices_list_v1(
-        NestedQuery(query): NestedQuery<api::endpoint::DevicesListV1Query>,
+        query: api::endpoint::DevicesListV1Query,
         State(state): State<AppState>,
-    ) -> Result<Json<api::model::ListDevices200Response>, Json<api::model::ListDevices400Response>> {
+    ) -> Result<api::model::ListDevices200Response, api::model::ListDevices400Response> {
         let _result = state.database.get_smth().await;
 
         if query.for_.map(|f| f.eq("test")).unwrap_or(false) {
-            return Ok(Json(api::model::ListDevices200Response {
+            return Ok(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -76,7 +75,7 @@ mod handler {
                     None,
                     None,
                 )],
-            }));
+            });
         }
 
         if query
@@ -90,7 +89,7 @@ mod handler {
             })
             .unwrap_or(false)
         {
-            return Ok(Json(api::model::ListDevices200Response {
+            return Ok(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -104,9 +103,9 @@ mod handler {
                     None,
                     None,
                 )],
-            }));
+            });
         } else if query.page.unwrap_or(0) == 2 {
-            return Ok(Json(api::model::ListDevices200Response {
+            return Ok(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -120,20 +119,20 @@ mod handler {
                     None,
                     None,
                 )],
-            }));
+            });
         }
 
-        Ok(Json(api::model::ListDevices200Response {
+        Ok(api::model::ListDevices200Response {
             pagination: api::model::Pagination::new(
                 1,
                 api::model::PaginationPageSizeVariant::PaginationPageSize10,
             ),
             data: vec![],
-        }))
+        })
     }
 
     pub async fn devices_get_v1(
-        Path(path): Path<api::endpoint::DeviceGetV1Path>,
+        path: api::endpoint::DeviceGetV1Path,
         State(state): State<AppState>,
     ) -> api::endpoint::DeviceGetV1Response {
         let _result = state.database.get_smth().await;
@@ -163,7 +162,7 @@ mod handler {
 
 
     pub async fn location_get_v1(
-        Path(_path): Path<api::endpoint::LocationGetV1Path>,
+        _path: api::endpoint::LocationGetV1Path,
         State(state): State<AppState>,
     ) -> api::endpoint::LocationGetV1Response {
         let _result = state.database.get_smth().await;
@@ -172,7 +171,7 @@ mod handler {
     }
 
     pub async fn locations_create_v1(
-        Json(request): Json<api::model::Location>
+        request: api::model::Location
     ) -> api::endpoint::LocationCreateV1Response {
         api::endpoint::LocationCreateV1Response::Status200(
             api::model::CreateLocation200Response::new(request)
@@ -181,8 +180,8 @@ mod handler {
 
 
     pub async fn devices_create_v1(
+        request: api::model::Device,
         State(state): State<AppState>,
-        Json(request): Json<api::model::Device>,
     ) -> api::endpoint::DeviceCreateV1Response {
         if let Err(_) = request.validate() {
             return api::endpoint::DeviceCreateV1Response::Status400(
@@ -209,7 +208,7 @@ mod handler {
     }
 
     pub async fn accessory_create_v1(
-        Json(data): Json<api::model::Accessory>,
+        data: api::model::Accessory,
     ) -> api::endpoint::AccessoryCreateV1Response {
         match data.accessory_id.as_str() {
             "conflict" => api::endpoint::AccessoryCreateV1Response::Status409(
@@ -237,7 +236,8 @@ mod handler {
     }
 
     pub async fn accessory_get_v1(
-        Path(path): Path<api::endpoint::AccessoryGetV1Path>,
+        path: api::endpoint::AccessoryGetV1Path,
+        _headers: api::endpoint::AccessoryGetV1RequestHeaders,
         State(_state): State<AppState>,
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
@@ -269,7 +269,7 @@ mod handler {
     }
 
     pub async fn accessory_get_log_v1(
-        Path(_path): Path<api::endpoint::AccessoryLogListV1Path>,
+        _path: api::endpoint::AccessoryLogListV1Path,
         State(_state): State<AppState>,
     ) -> api::endpoint::AccessoryLogListV1Response {
         api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
@@ -311,7 +311,7 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
         .livez_list(handler::livez_list)
         .readyz_list(handler::readyz_list);
 
-    let state = AppState {
+    let state: AppState = AppState {
         database,
         messagebus,
     };
@@ -321,7 +321,8 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
         .merge(accessories)
         .merge(health)
         .merge(locations)
-        .with_state(state);
+        .with_state(state.clone()) // todo: debug state issue
+        .layer(Extension(state));
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
@@ -458,7 +459,9 @@ mod tests {
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client.accessory_get_v1("1111".to_string()).await;
+        let result = client.accessory_get_v1("1111".to_string(), super::client::devices::endpoint::AccessoryGetV1Headers {
+            secret: "test".to_string(),
+        }).await;
 
         assert_eq!(result.is_err(), false);
 
@@ -482,7 +485,9 @@ mod tests {
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client.accessory_get_v1("invalid".to_string()).await;
+        let result = client.accessory_get_v1("invalid".to_string(), super::client::devices::endpoint::AccessoryGetV1Headers {
+            secret: "test".to_string(),
+        }).await;
 
         assert_eq!(result.is_err(), true);
 
@@ -727,7 +732,7 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-                updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
+                updated_at: Some(Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap()),
                 ratio: Some(10f64),
                 custom: None,
                 limited_text: None,
@@ -754,7 +759,7 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-                updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
+                updated_at: Some(Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap()),
                 ratio: Some(10f64),
                 custom: Some(Coordinates(0.5f64, 0.8f64)),
                 limited_text: None,

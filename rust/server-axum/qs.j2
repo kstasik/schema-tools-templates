@@ -18,10 +18,10 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct NestedQuery<T>(pub T);
+pub struct Query<T>(pub T);
 
 #[async_trait]
-impl<T, S> FromRequestParts<S> for NestedQuery<T>
+impl<T, S> FromRequestParts<S> for Query<T>
     where
         T: DeserializeOwned,
         S: Send + Sync,
@@ -34,11 +34,11 @@ impl<T, S> FromRequestParts<S> for NestedQuery<T>
         let value =
             serde_qs::from_str::<T>(query).map_err(FailedToDeserializeQueryStringRejection)?;
 
-        Ok(NestedQuery(value))
+        Ok(Query(value))
     }
 }
 
-impl<T> Deref for NestedQuery<T> {
+impl<T> Deref for Query<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {

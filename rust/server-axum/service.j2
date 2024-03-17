@@ -2,24 +2,42 @@
 {%- import "macros.j2" as m -%}
 {%- import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
-
 use axum::{
-    routing::{get, post, delete, patch, put, options, MethodRouter},
-    handler::Handler,
-    Router,
+    body::{Body, HttpBody},
+    extract::{FromRequest, FromRequestParts, Request as ERequest},
+    handler::{future::IntoServiceFuture, Handler},
+    http::Request,
+    response::{IntoResponse, Response},
+    routing::{self, on_service, MethodFilter},
+    Router, BoxError,
 };
+use futures::{future::LocalBoxFuture, Future};
+use std::{
+    convert::{Infallible, TryFrom},
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll},
+};
+use tower_service::Service;
 
+
+macro_rules! all_the_tuples {
+    ($name:ident) => {
+        $name!(T1);
+        $name!(T1, T2);
+        $name!(T1, T2, T3);
+        $name!(T1, T2, T3, T4);
+        $name!(T1, T2, T3, T4, T5);
+	}
+}
 
 {% for tag in tags %}
 /// {{ tag.tag }} router
-pub struct {{ tag.tag | pascalcase }}Router<S> {
+pub struct {{ tag.tag | pascalcase }}Router<S = ()> {
 	pub(crate) router: Router<S>,
 }
 
-impl <S>{{ tag.tag | pascalcase }}Router<S>
-    where
-    S: Clone + Send + Sync + 'static,
-{
+impl<S> {{ tag.tag | pascalcase }}Router<S> where S: Clone + Send + Sync + 'static {
 	pub fn new() -> Self {
 		Self {
 			router: Router::new()
@@ -44,21 +62,191 @@ impl <S>{{ tag.tag | pascalcase }}Router<S>
     /// }
     /// let router = {{ tag.tag | pascalcase }}Router::default().{{ endpoint.operation | snakecase }}(handler);
     /// ```
-	pub fn {{ endpoint.operation | snakecase }}<T: 'static>(mut self, handler: impl Handler<T, S> + Clone + Send + 'static) -> Self {
+	pub fn {{ endpoint.operation | snakecase }}<H, T>(mut self, handler: H) -> Self
+        where
+            H: {{ endpoint.operation | pascalcase }}Handler<T, S>,
+            T: 'static
 	{
-        self.router = self.router.route("{{ endpoint.path | replace(from="{", to=":") | replace(from="}", to="") }}", {{ endpoint.method | lower }}(handler));
+        self.router = self.router.route("{{ endpoint.path | replace(from="{", to=":") | replace(from="}", to="") }}", on_service(MethodFilter::{{ endpoint.method | upper }}, {{ endpoint.operation | pascalcase }}Service::new(handler)));
+
 		self
 	}
-    }
 	{% endfor %}
 }
 
-impl<S> Into<Router<S>> for {{ tag.tag | pascalcase }}Router<S>
-    where
-        S: Clone + Send + Sync + 'static {
-    fn into(self) -> Router<S> {
-        self.router
+impl<S> Default for {{ tag.tag | pascalcase }}Router<S> where S: Clone + Send + Sync + 'static  {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
+impl<S> From<{{ tag.tag | pascalcase }}Router<S>> for Router<S> {
+    fn from(r: {{ tag.tag | pascalcase }}Router<S>) -> Self {
+        r.router
+    }
+}
+
+{% for endpoint in tag.endpoints %}
+{%- set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+{%- set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
+/// {{ endpoint.method | upper }} {{ endpoint.path }} handler
+pub trait {{ endpoint.operation | pascalcase }}Handler<T, S, B = Body>: Clone + Send + Sized + 'static {
+	fn call(
+        self,
+        req: ERequest,
+        state: S
+    ) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>>;
+}
+
+impl<F, Fut, S, B> {{ endpoint.operation | pascalcase }}Handler<(), S, B> for F
+where
+    F: FnOnce({{ e::endpoint_parameters(endpoint = endpoint) }}) -> Fut + Clone + Send + 'static,
+    Fut: Future + Send,
+	Fut::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response>,
+	{% if endpoint.requestbody.models.default -%}
+	B: HttpBody + Send + 'static,
+    B::Data: Send,
+    B::Error: Into<BoxError>,
+	{% else %}
+    B: Send + 'static,
+	{% endif %}
+    S: Send + Sync + 'static,
+{
+	{%- set body = e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers) -%} 
+	{%- set body_fr = e::handler_definition_body_fr(endpoint = endpoint, options = options, filtered_headers = filtered_headers) -%} 
+    fn call(
+        self,
+        {% if not body and not body_fr %}_{% endif %}req: ERequest,
+        state: S
+    ) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
+		Box::pin(async move {
+            {% if body or body_fr -%}
+            let (mut parts, body) = req.into_parts();
+            let state = &state;
+			
+{{ body }}
+{{ body_fr }}
+{%- endif %}
+
+			let res = self(
+				{%- filter trim_start_matches(pat=", ") -%}
+				{{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
+			).await;
+
+			let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
+
+			response.into()
+		})
+	}
+}
+
+macro_rules! {{ endpoint.operation | snakecase }}_handler {
+    ( $($ty:ident),* $(,)? ) => {
+        #[allow(non_snake_case)]
+        impl<F, Fut, S, B, $($ty,)*> {{ endpoint.operation | pascalcase }}Handler<($($ty,)*), S, B> for F
+        where
+			F: FnOnce({{ e::endpoint_parameters(endpoint = endpoint) }}$($ty,)*) -> Fut + Clone + Send + 'static,
+			Fut: Future + Send,
+			Fut::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response>,
+			{%- if endpoint.requestbody.models.default -%}
+			B: HttpBody + Send + 'static,
+			B::Data: Send,
+			B::Error: Into<BoxError>,
+			{%- else %}
+			B: Send + 'static,
+			{%- endif %}
+            S: Send + Sync + 'static,
+            $( $ty: FromRequestParts<S> + Send,)*
+        {
+            fn call(self, req: ERequest, state: S) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
+                Box::pin(async move {
+			        let (mut parts, body) = req.into_parts();
+                    let state = &state;
+
+                    {{ e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers) }}
+
+                    $(
+                        let $ty = match $ty::from_request_parts(&mut parts, state).await {
+                            Ok(value) => value,
+                            Err(rejection) => return rejection.into_response(),
+                        };
+                    )*
+
+
+                    {{ e::handler_definition_body_fr(endpoint = endpoint, options = options, filtered_headers = filtered_headers) }}
+                 
+                    let res = self({%- filter trim_start_matches(pat=", ") -%}
+						{{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
+						$($ty,)*).await;
+
+					let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
+
+					response.into()
+                })
+            }
+        }
+    };
+}
+
+all_the_tuples!({{ endpoint.operation | snakecase }}_handler);
+
+/// {{ endpoint.method | upper }} {{ endpoint.path }} service 
+struct {{ endpoint.operation | pascalcase }}Service<H, T, S>
+where
+	H: {{ endpoint.operation | pascalcase }}Handler<T, S> {
+	handler: H,
+	_marker: PhantomData<fn() -> (T, S)>,
+}
+
+impl<H, T, S> Clone for {{ endpoint.operation | pascalcase }}Service<H, T, S>
+where
+    H: {{ endpoint.operation | pascalcase }}Handler<T, S>
+{
+    fn clone(&self) -> Self {
+        Self {
+            handler: self.handler.clone(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<H, T, S> {{ endpoint.operation | pascalcase }}Service<H, T, S>
+where
+	H: {{ endpoint.operation | pascalcase }}Handler<T, S> {
+	pub fn new(handler: H) -> Self {
+		Self {
+			handler,
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<H, T, S> Service<ERequest> for {{ endpoint.operation | pascalcase }}Service<H, T, S>
+where
+	H: {{ endpoint.operation | pascalcase }}Handler<T, S>,
+    S: Send + Sync + 'static {
+    type Response = Response;
+    type Error = Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    #[inline]
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, mut req: ERequest) -> Self::Future {
+        let handler = self.handler.clone();
+
+        Box::pin(async move {
+            let state = req
+                .extensions_mut()
+                .remove::<S>()
+                .expect("state extension missing. This is a bug in code schema-tools, please file an issue");
+
+            Ok( {{ endpoint.operation | pascalcase }}Handler::call(handler, req, state).await)
+        })
+    }
+}
+
+{% endfor %}
 {% endfor %}
