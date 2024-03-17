@@ -80,7 +80,7 @@ pub struct {{ endpoint.operation | pascalcase }}RequestHeaders{
 	{% endfor %}
 }
 
-impl TryFrom<&axum::http::HeaderMap> for {{ endpoint.operation | pascalcase }}RequestHeaders {
+impl std::convert::TryFrom<&axum::http::HeaderMap> for {{ endpoint.operation | pascalcase }}RequestHeaders {
     type Error = StatusCode;
 
     fn try_from(value: &axum::http::HeaderMap) -> Result<Self, Self::Error> {

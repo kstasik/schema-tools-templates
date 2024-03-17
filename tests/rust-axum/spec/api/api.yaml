@@ -267,6 +267,11 @@ paths:
         - $ref: '#/components/parameters/traceParentHeader'
         - $ref: '#/components/parameters/traceStateHeader'
         - $ref: '#/components/parameters/accessoryIdPath'
+        - in: header
+          name: secret
+          schema:
+            type: string
+          required: true
 
   /v1/accessories/{accessoryId}/log:
     get:
