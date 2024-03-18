@@ -73,6 +73,12 @@
     {% endif %}
 {% endfilter %}{% endmacro get_validation %}
 
+{% macro get_description(object) -%}
+{%- if object.description %}
+/// {{ object.description | trim_end }}
+{%- endif -%}
+{%- endmacro get_description %}
+
 {% macro type(property, ns="") %}{% filter nospaces %}
 {% if property.nullable %}Option<{% endif %}
 

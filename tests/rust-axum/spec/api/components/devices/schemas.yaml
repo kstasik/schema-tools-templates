@@ -1,5 +1,6 @@
 Device:
   additionalProperties: false
+  description: A device object
   type: object
   required:
     - deviceId 
@@ -7,8 +8,16 @@ Device:
     - remoteId
   properties:
     deviceId:
+      description: Device identifier
       type: string
     deviceClassType:
+      description: |
+        Device class type:
+        - 0 - undefined
+        - 5 - another
+        - 10 - explanation
+
+        Some additional info...
       type: integer
       enum: [0, 5, 10, 15, 20, 30, 50, 100]
     remoteId:
