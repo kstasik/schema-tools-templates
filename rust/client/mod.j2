@@ -21,7 +21,7 @@ use {{ apm_prefix }}tracing::Span;
 use {{ apm_prefix }}tracing::Instrument;
 {% if "opentelemetry" in apm %}
 use {{ apm_prefix }}opentelemetry::propagation::TextMapPropagator;
-use {{ apm_prefix }}opentelemetry::sdk::propagation::TraceContextPropagator;
+use {{ apm_prefix }}opentelemetry_sdk::propagation::TraceContextPropagator;
 use {{ apm_prefix }}tracing_opentelemetry::OpenTelemetrySpanExt;
 {% endif %}
 {% endif %}
