@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="CargoProjects">
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="adb7908c-57f4-4eca-a68d-f3c96d2d4189" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/spec/api/api.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/spec/api/api.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spec/api/components/devices/parameters.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/spec/api/components/devices/parameters.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
-    </list>
+    <list default="true" id="adb7908c-57f4-4eca-a68d-f3c96d2d4189" name="Changes" comment="chore: update dependency versions in Makefile and Cargo files" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -36,30 +35,62 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">
-    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
-    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="WebServerToolWindowFactoryState" value="false" />
-    <property name="go.formatter.settings.were.checked" value="true" />
-    <property name="go.import.settings.migrated" value="true" />
-    <property name="nodejs_package_manager_path" value="npm" />
-    <property name="org.rust.cargo.project.model.PROJECT_DISCOVERY" value="true" />
-  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "node.js.selected.package.tslint": "(autodetect)",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true"
+  }
+}]]></component>
   <component name="RunManager">
-    <configuration default="true" type="SwaggerCodegen">
-      <option name="activeConfigurationType" value="FILE" />
-      <option name="configurationPath" value="" />
-      <option name="customJreEnabled" value="false" />
+    <configuration default="true" type="GoApplicationRunConfiguration" factoryName="Go Application">
+      <working_directory value="$PROJECT_DIR$" />
+      <go_parameters value="-i" />
+      <kind />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="GoTestRunConfiguration" factoryName="Go Test">
+      <working_directory value="$PROJECT_DIR$" />
+      <go_parameters value="-i" />
+      <kind />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="JetRunConfigurationType">
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
+      <option name="filePath" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="SwaggerCodegen" show_console_on_std_err="false" show_console_on_std_out="false">
+      <option name="allowRunningInParallel" value="false" />
       <option name="customTemplatesPath" value="" />
-      <option name="enableDebugLogging" value="false" />
+      <option name="envs">
+        <map />
+      </option>
       <option name="generateToPath" value="$PROJECT_DIR$/gen" />
       <option name="generationParameters">
         <list />
       </option>
-      <option name="generatorPath" value="https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/5.0.0/openapi-generator-cli-5.0.0.jar" />
+      <option name="generatorType" value="OPENAPI_GENERATOR_V6" />
       <option name="jdkPath" value="" />
       <option name="language" value="java" />
+      <option name="passParentEnvs" value="true" />
+      <option name="programParameters" />
+      <option name="projectPathOnTarget" />
+      <option name="selectedOptions">
+        <list />
+      </option>
       <option name="specificationPath" value="$PROJECT_DIR$/spec/api/api.yaml" />
+      <option name="workingDirectory" value="$PROJECT_DIR$/spec/api" />
       <method v="2" />
     </configuration>
   </component>
@@ -82,8 +113,5 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
-  </component>
-  <component name="VgoProject">
-    <integration-enabled>true</integration-enabled>
   </component>
 </project>

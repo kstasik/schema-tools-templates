@@ -215,7 +215,7 @@ pub mod producer {
     {% if "opentelemetry" in apm %}
     use super::super::{SPAN_STATUS_ERROR, SPAN_STATUS_OK};
     use opentelemetry::propagation::TextMapPropagator;
-    use opentelemetry::sdk::propagation::TraceContextPropagator;
+    use opentelemetry_sdk::propagation::TraceContextPropagator;
     use tracing_opentelemetry::OpenTelemetrySpanExt;
     {% endif %}
     {% endif %}

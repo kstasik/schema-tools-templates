@@ -10,11 +10,11 @@ tokio = { version = "1.0", features = ["full"] }
 axum = "0.5.1"
 tower-service = "0.3.1"
 log = "0.4"
-env_logger = "0.8"
+env_logger = "0.11.3"
 futures-core = "0.3"
 futures = "0.3"
-serde_qs = "0.8.5"
-async-trait = "0.1.52"
+serde_qs = "0.12.0"
+async-trait = "0.1.78"
 uuid = { version = "1.0.0", features = ["v4", "fast-rng", "serde"] }
 
 # server
@@ -22,17 +22,18 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_repr = "0.1"
 regex = "1"
-validator = { version = "0.12", features = ["derive"] }
+validator = { version = "0.17.0", features = ["derive"] }
 lazy_static = "1.4.0"
 chrono = { version = "0.4", features = ["serde"] }
 
 # tracing
 tracing = "0.1"
-tracing-subscriber = "0.2"
-tracing-opentelemetry = "0.15.0"
+tracing-subscriber = "0.3.18"
+tracing-opentelemetry = "0.23.0"
 
-opentelemetry = { version = "0.16", features = ["rt-tokio", "trace", "metrics"] }
-opentelemetry-otlp = { version = "0.9", features = ["tonic", "metrics"] }
+opentelemetry = { version = "0.22.0", features = ["trace", "metrics"] }
+opentelemetry_sdk = "0.22"
+opentelemetry-otlp = { version = "0.15.0", features = ["tonic", "metrics"] }
 
 # client
 reqwest = { version = "0.11", features = ["json"] }
