@@ -1,3 +1,4 @@
+use axum::Extension;
 use serde::{Deserialize, Serialize};
 
 use std::{net::SocketAddr, sync::Arc};
@@ -27,16 +28,16 @@ pub struct Coordinates (pub f64, pub f64);
 mod api;
 mod client;
 mod handler {
-    use std::sync::Arc;
+    
 
-    use axum::Extension;
+    use axum::extract::State;
     use uuid::uuid;
     use validator::Validate;
 
-    use crate::{api, Database, MessageBus};
+    use crate::{api, AppState};
 
-    pub async fn livez_list(db: Extension<Arc<Database>>) -> api::endpoint::LivezListResponse {
-        let _result = db.get_smth().await;
+    pub async fn livez_list(State(state): State<AppState>) -> api::endpoint::LivezListResponse {
+        let _result = state.database.get_smth().await;
 
         api::endpoint::LivezListResponse::Status200(api::model::ServiceStatus {
             status: api::model::ServiceStatusStatusVariant::Up,
@@ -44,8 +45,8 @@ mod handler {
         })
     }
 
-    pub async fn readyz_list(db: Extension<Arc<Database>>) -> api::endpoint::ReadyzListResponse {
-        let _result = db.get_smth().await;
+    pub async fn readyz_list(State(state): State<AppState>) -> api::endpoint::ReadyzListResponse {
+        let _result = state.database.get_smth().await;
 
         api::endpoint::ReadyzListResponse::Status200(api::model::ServiceStatus {
             status: api::model::ServiceStatusStatusVariant::Up,
@@ -55,9 +56,9 @@ mod handler {
 
     pub async fn devices_list_v1(
         query: api::endpoint::DevicesListV1Query,
-        Extension(db): Extension<Arc<Database>>,
+        State(state): State<AppState>,
     ) -> Result<api::model::ListDevices200Response, api::model::ListDevices400Response> {
-        let _result = db.get_smth().await;
+        let _result = state.database.get_smth().await;
 
         if query.for_.map(|f| f.eq("test")).unwrap_or(false) {
             return Ok(api::model::ListDevices200Response {
@@ -132,9 +133,9 @@ mod handler {
 
     pub async fn devices_get_v1(
         path: api::endpoint::DeviceGetV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        State(state): State<AppState>,
     ) -> api::endpoint::DeviceGetV1Response {
-        let _result = db.get_smth().await;
+        let _result = state.database.get_smth().await;
 
         if path.device_id.eq("missing") {
             return api::endpoint::DeviceGetV1Response::Status400(
@@ -159,11 +160,12 @@ mod handler {
         })
     }
 
+
     pub async fn location_get_v1(
         _path: api::endpoint::LocationGetV1Path,
-        Extension(db): Extension<Arc<Database>>,
+        State(state): State<AppState>,
     ) -> api::endpoint::LocationGetV1Response {
-        let _result = db.get_smth().await;
+        let _result = state.database.get_smth().await;
 
         unreachable!()
     }
@@ -176,10 +178,10 @@ mod handler {
         )
     }
 
+
     pub async fn devices_create_v1(
         request: api::model::Device,
-        Extension(db): Extension<Arc<Database>>,
-        Extension(bus): Extension<Arc<MessageBus>>,
+        State(state): State<AppState>,
     ) -> api::endpoint::DeviceCreateV1Response {
         if let Err(_) = request.validate() {
             return api::endpoint::DeviceCreateV1Response::Status400(
@@ -191,8 +193,8 @@ mod handler {
             )
         }
 
-        let _result = db.get_smth().await;
-        let _result2 = bus.send().await;
+        let _result = state.database.get_smth().await;
+        let _result2 = state.messagebus.send().await;
 
         if request.device_id == "conflict" {
             api::endpoint::DeviceCreateV1Response::Status409(
@@ -235,7 +237,8 @@ mod handler {
 
     pub async fn accessory_get_v1(
         path: api::endpoint::AccessoryGetV1Path,
-        Extension(_db): Extension<Arc<Database>>,
+        _headers: api::endpoint::AccessoryGetV1RequestHeaders,
+        State(_state): State<AppState>,
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
             return api::endpoint::AccessoryGetV1Response::Status400(
@@ -267,7 +270,7 @@ mod handler {
 
     pub async fn accessory_get_log_v1(
         _path: api::endpoint::AccessoryLogListV1Path,
-        Extension(_db): Extension<Arc<Database>>,
+        State(_state): State<AppState>,
     ) -> api::endpoint::AccessoryLogListV1Response {
         api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
     }
@@ -279,6 +282,12 @@ async fn main() {
     let messagebus = Arc::new(MessageBus {});
 
     run_server(database, messagebus, 8080).await
+}
+
+#[derive(Clone)]
+struct AppState {
+    database: Arc<Database>,
+    messagebus: Arc<MessageBus>
 }
 
 async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: u16) {
@@ -302,18 +311,24 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
         .livez_list(handler::livez_list)
         .readyz_list(handler::readyz_list);
 
+    let state: AppState = AppState {
+        database,
+        messagebus,
+    };
+
     let app = axum::Router::new()
         .merge(devices)
         .merge(accessories)
         .merge(health)
         .merge(locations)
-        .layer(axum::Extension(database))
-        .layer(axum::Extension(messagebus));
+        .with_state(state.clone()) // todo: debug state issue
+        .layer(Extension(state));
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .unwrap()
+        .unwrap();
+
+    axum::serve(listener, app).await.unwrap()
 }
 
 #[cfg(test)]
@@ -444,7 +459,9 @@ mod tests {
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client.accessory_get_v1("1111".to_string()).await;
+        let result = client.accessory_get_v1("1111".to_string(), super::client::devices::endpoint::AccessoryGetV1Headers {
+            secret: "test".to_string(),
+        }).await;
 
         assert_eq!(result.is_err(), false);
 
@@ -468,7 +485,9 @@ mod tests {
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client.accessory_get_v1("invalid".to_string()).await;
+        let result = client.accessory_get_v1("invalid".to_string(), super::client::devices::endpoint::AccessoryGetV1Headers {
+            secret: "test".to_string(),
+        }).await;
 
         assert_eq!(result.is_err(), true);
 
@@ -713,7 +732,7 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-                updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
+                updated_at: Some(Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap()),
                 ratio: Some(10f64),
                 custom: None,
                 limited_text: None,
@@ -740,7 +759,7 @@ mod tests {
                 device_id: "test".to_string(),
                 device_class_type: super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType20,
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-                updated_at: Some(Utc.ymd(2014, 7, 8).and_hms(9, 10, 11)),
+                updated_at: Some(Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap()),
                 ratio: Some(10f64),
                 custom: Some(Coordinates(0.5f64, 0.8f64)),
                 limited_text: None,
