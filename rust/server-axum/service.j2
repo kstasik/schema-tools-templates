@@ -1,7 +1,9 @@
 {# type=tags,filename=api/service.rs,min_version=0.5.0 #}
 {%- import "macros.j2" as m -%}
 {%- import "extra.j2" as e -%}
+{%- set strict_router = options.relaxedRouter is not defined -%}
 {{ m::do_not_modify() }}
+{%- if strict_router %}
 use axum::{
     body::{Body, HttpBody},
     extract::{FromRequest, FromRequestParts, Request as ERequest},
@@ -19,8 +21,15 @@ use std::{
     task::{Context, Poll},
 };
 use tower_service::Service;
+{%- else %}
+use axum::{
+    routing::{get, post, delete, patch, put, options, MethodRouter},
+    handler::Handler,
+    Router,
+};
+{%- endif %}
 
-
+{%- if strict_router %}
 macro_rules! all_the_tuples {
     ($name:ident) => {
         $name!(T1);
@@ -28,23 +37,26 @@ macro_rules! all_the_tuples {
         $name!(T1, T2, T3);
         $name!(T1, T2, T3, T4);
         $name!(T1, T2, T3, T4, T5);
-	}
+    }
 }
+{%- endif %}
 
-{% for tag in tags %}
+{%- for tag in tags %}
+
 /// {{ tag.tag }} router
 pub struct {{ tag.tag | pascalcase }}Router<S = ()> {
-	pub(crate) router: Router<S>,
+    pub(crate) router: Router<S>,
 }
 
 impl<S> {{ tag.tag | pascalcase }}Router<S> where S: Clone + Send + Sync + 'static {
-	pub fn new() -> Self {
-		Self {
-			router: Router::new()
-		}
-	}
+    pub fn new() -> Self {
+        Self {
+            router: Router::new()
+        }
+    }
 
-	{% for endpoint in tag.endpoints %}
+    {%- for endpoint in tag.endpoints %}
+
     /// {{ endpoint.method | upper }} {{ endpoint.path }}
     ///
     /// # Examples
@@ -62,16 +74,15 @@ impl<S> {{ tag.tag | pascalcase }}Router<S> where S: Clone + Send + Sync + 'stat
     /// }
     /// let router = {{ tag.tag | pascalcase }}Router::default().{{ endpoint.operation | snakecase }}(handler);
     /// ```
-	pub fn {{ endpoint.operation | snakecase }}<H, T>(mut self, handler: H) -> Self
+    pub fn {{ endpoint.operation | snakecase }}<H, T>(mut self, handler: H) -> Self
         where
-            H: {{ endpoint.operation | pascalcase }}Handler<T, S>,
+            H: {% if strict_router %}{{ endpoint.operation | pascalcase }}Handler<T, S>{% else %}Handler<T, S> + Clone + Send + Sync + 'static{% endif %},
             T: 'static
-	{
-        self.router = self.router.route("{{ endpoint.path | replace(from="{", to=":") | replace(from="}", to="") }}", on_service(MethodFilter::{{ endpoint.method | upper }}, {{ endpoint.operation | pascalcase }}Service::new(handler)));
-
-		self
-	}
-	{% endfor %}
+    {
+        self.router = self.router.route("{{ endpoint.path | replace(from="{", to=":") | replace(from="}", to="") }}", {% if strict_router -%}on_service(MethodFilter::{{ endpoint.method | upper }}, {{ endpoint.operation | pascalcase }}Service::new{%- else -%}{{ endpoint.method | lower }}{%- endif -%}(handler){% if strict_router %}){% endif %});
+        self
+    }
+    {%- endfor %}
 }
 
 impl<S> Default for {{ tag.tag | pascalcase }}Router<S> where S: Clone + Send + Sync + 'static  {
@@ -86,12 +97,13 @@ impl<S> From<{{ tag.tag | pascalcase }}Router<S>> for Router<S> {
     }
 }
 
+{%- if strict_router %}
 {% for endpoint in tag.endpoints %}
 {%- set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
 {%- set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 /// {{ endpoint.method | upper }} {{ endpoint.path }} handler
 pub trait {{ endpoint.operation | pascalcase }}Handler<T, S, B = Body>: Clone + Send + Sized + 'static {
-	fn call(
+    fn call(
         self,
         req: ERequest,
         state: S
@@ -102,42 +114,42 @@ impl<F, Fut, S, B> {{ endpoint.operation | pascalcase }}Handler<(), S, B> for F
 where
     F: FnOnce({{ e::endpoint_parameters(endpoint = endpoint) }}) -> Fut + Clone + Send + 'static,
     Fut: Future + Send,
-	Fut::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response>,
-	{% if endpoint.requestbody.models.default -%}
-	B: HttpBody + Send + 'static,
+    Fut::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response>,
+    {% if endpoint.requestbody.models.default -%}
+    B: HttpBody + Send + 'static,
     B::Data: Send,
     B::Error: Into<BoxError>,
-	{% else %}
+    {% else %}
     B: Send + 'static,
-	{% endif %}
+    {% endif %}
     S: Send + Sync + 'static,
 {
-	{%- set body = e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers) -%} 
-	{%- set body_fr = e::handler_definition_body_fr(endpoint = endpoint, options = options, filtered_headers = filtered_headers) -%} 
+    {%- set body = e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers) -%}
+    {%- set body_fr = e::handler_definition_body_fr(endpoint = endpoint, options = options, filtered_headers = filtered_headers) -%}
     fn call(
         self,
         {% if not body and not body_fr %}_{% endif %}req: ERequest,
         state: S
     ) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
-		Box::pin(async move {
+        Box::pin(async move {
             {% if body or body_fr -%}
             let (mut parts, body) = req.into_parts();
             let state = &state;
-			
+
 {{ body }}
 {{ body_fr }}
 {%- endif %}
 
-			let res = self(
-				{%- filter trim_start_matches(pat=", ") -%}
-				{{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
-			).await;
+            let res = self(
+                {%- filter trim_start_matches(pat=", ") -%}
+                {{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
+            ).await;
 
-			let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
+            let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
 
-			response.into()
-		})
-	}
+            response.into()
+        })
+    }
 }
 
 macro_rules! {{ endpoint.operation | snakecase }}_handler {
@@ -145,22 +157,22 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
         #[allow(non_snake_case)]
         impl<F, Fut, S, B, $($ty,)*> {{ endpoint.operation | pascalcase }}Handler<($($ty,)*), S, B> for F
         where
-			F: FnOnce({{ e::endpoint_parameters(endpoint = endpoint) }}$($ty,)*) -> Fut + Clone + Send + 'static,
-			Fut: Future + Send,
-			Fut::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response>,
-			{%- if endpoint.requestbody.models.default -%}
-			B: HttpBody + Send + 'static,
-			B::Data: Send,
-			B::Error: Into<BoxError>,
-			{%- else %}
-			B: Send + 'static,
-			{%- endif %}
+            F: FnOnce({{ e::endpoint_parameters(endpoint = endpoint) }}$($ty,)*) -> Fut + Clone + Send + 'static,
+            Fut: Future + Send,
+            Fut::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response>,
+            {%- if endpoint.requestbody.models.default -%}
+            B: HttpBody + Send + 'static,
+            B::Data: Send,
+            B::Error: Into<BoxError>,
+            {%- else %}
+            B: Send + 'static,
+            {%- endif %}
             S: Send + Sync + 'static,
             $( $ty: FromRequestParts<S> + Send,)*
         {
             fn call(self, req: ERequest, state: S) -> Pin<Box<dyn Future<Output = Response> + Send + 'static>> {
                 Box::pin(async move {
-			        let (mut parts, body) = req.into_parts();
+                    let (mut parts, body) = req.into_parts();
                     let state = &state;
 
                     {{ e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers) }}
@@ -174,14 +186,14 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
 
 
                     {{ e::handler_definition_body_fr(endpoint = endpoint, options = options, filtered_headers = filtered_headers) }}
-                 
+
                     let res = self({%- filter trim_start_matches(pat=", ") -%}
-						{{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
-						$($ty,)*).await;
+                        {{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
+                        $($ty,)*).await;
 
-					let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
+                    let response: super::endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
 
-					response.into()
+                    response.into()
                 })
             }
         }
@@ -190,12 +202,12 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
 
 all_the_tuples!({{ endpoint.operation | snakecase }}_handler);
 
-/// {{ endpoint.method | upper }} {{ endpoint.path }} service 
+/// {{ endpoint.method | upper }} {{ endpoint.path }} service
 struct {{ endpoint.operation | pascalcase }}Service<H, T, S>
 where
-	H: {{ endpoint.operation | pascalcase }}Handler<T, S> {
-	handler: H,
-	_marker: PhantomData<fn() -> (T, S)>,
+    H: {{ endpoint.operation | pascalcase }}Handler<T, S> {
+    handler: H,
+    _marker: PhantomData<fn() -> (T, S)>,
 }
 
 impl<H, T, S> Clone for {{ endpoint.operation | pascalcase }}Service<H, T, S>
@@ -212,18 +224,18 @@ where
 
 impl<H, T, S> {{ endpoint.operation | pascalcase }}Service<H, T, S>
 where
-	H: {{ endpoint.operation | pascalcase }}Handler<T, S> {
-	pub fn new(handler: H) -> Self {
-		Self {
-			handler,
-			_marker: PhantomData,
-		}
-	}
+    H: {{ endpoint.operation | pascalcase }}Handler<T, S> {
+    pub fn new(handler: H) -> Self {
+        Self {
+            handler,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<H, T, S> Service<ERequest> for {{ endpoint.operation | pascalcase }}Service<H, T, S>
 where
-	H: {{ endpoint.operation | pascalcase }}Handler<T, S>,
+    H: {{ endpoint.operation | pascalcase }}Handler<T, S>,
     S: Send + Sync + 'static {
     type Response = Response;
     type Error = Infallible;
@@ -249,4 +261,5 @@ where
 }
 
 {% endfor %}
-{% endfor %}
+{%- endif %}
+{%- endfor %}
