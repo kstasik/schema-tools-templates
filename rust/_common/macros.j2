@@ -63,7 +63,7 @@
     {% if validation.maxLength %}length(max = {{ validation.maxLength }}), {% endif %}
     {% if validation.minLength %}length(min = {{ validation.minLength }}), {% endif %}
     {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
-    {% if validation.pattern %}regex="{{ validation.pattern.name | snakecase | upper }}", {% endif %}
+    {% if validation.pattern %}regex(path = *{{ validation.pattern.name | snakecase | upper }}), {% endif %}
     {% if validation.minimum is defined or validation.maximum is defined %}
     range(
         {% if validation.minimum is defined %}min = {{ validation.minimum }}{% if validation.maximum is defined %}, {% endif %}{% endif %}

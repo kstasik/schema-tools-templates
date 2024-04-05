@@ -5,7 +5,8 @@
 use serde::{Serialize, Deserialize, Deserializer};
 use std::collections::BTreeMap;
 {% if not options.skipValidate %}use validator::Validate;
-use regex::Regex;{% endif %}
+use regex::Regex;
+use once_cell::sync::Lazy;{% endif %}
 {% block use %}{% endblock use %}
 
 {% if formats is containing("decimal") %}
@@ -16,13 +17,11 @@ use chrono::{DateTime, Utc};
 {% endif %}
 
 {% if not options.skipValidate %}
-lazy_static::lazy_static! {
-   static ref UUID: Regex = Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap();
-   static ref FLOAT: Regex = Regex::new(r"^[0-9\.]+$").unwrap();
+static UUID: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap() });
+static FLOAT: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^[0-9\.]+$").unwrap() });
 {% for regexp in regexps -%}
-   static ref {{ regexp.name | snakecase | upper }}: Regex = Regex::new(r"{{ regexp.pattern }}").unwrap();
+static {{ regexp.name | snakecase | upper }}: Lazy<Regex> = Lazy::new(|| { Regex::new(r"{{ regexp.pattern }}").unwrap() });
 {% endfor %}
-}
 {% endif %}
 
 {% for model in models %}
@@ -31,13 +30,13 @@ lazy_static::lazy_static! {
 pub struct {{ m::model_name(name = model.object.name) }} {
     {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") -%}
     {% for property in filtered_properties -%}
-    {% if property.validation and property.type != 'enum' %}
-    {% if m::get_validation(validation = property.validation) | length %}
+    {%- if property.validation and property.type != 'enum' %}
+    {%- if m::get_validation(validation = property.validation) | length %}
     {% if not options.skipValidate %}#[validate({{ m::get_validation(validation = property.validation) }})]{% endif %}
-    {% endif %}
-    {% elif m::need_nested_validation(property=property)%}
+    {%- endif %}
+    {%- elif m::need_nested_validation(property=property)%}
     {% if not options.skipValidate %}#[validate]{% endif %}
-    {% endif %}
+    {%- endif %}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
     pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
     {%- endfor %}
