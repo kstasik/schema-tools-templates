@@ -17,10 +17,10 @@ use chrono::{DateTime, Utc};
 {% endif %}
 
 {% if not options.skipValidate %}
-static UUID: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap() });
-static FLOAT: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^[0-9\.]+$").unwrap() });
+pub static UUID: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap() });
+pub static FLOAT: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^[0-9\.]+$").unwrap() });
 {% for regexp in regexps -%}
-static {{ regexp.name | snakecase | upper }}: Lazy<Regex> = Lazy::new(|| { Regex::new(r"{{ regexp.pattern }}").unwrap() });
+pub static {{ regexp.name | snakecase | upper }}: Lazy<Regex> = Lazy::new(|| { Regex::new(r"{{ regexp.pattern }}").unwrap() });
 {% endfor %}
 {% endif %}
 

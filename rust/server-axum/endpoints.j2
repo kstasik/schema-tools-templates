@@ -35,6 +35,11 @@ impl IntoResponse for FailedToDeserializeQuery {
 #[derive(Validate, Deserialize)]
 pub struct {{ endpoint.operation | pascalcase }}Path{
 	{% for param in endpoint.parameters.path %}
+    {% if param.model.validation and param.model.type != 'enum' %}
+    {% if m::get_validation(validation = param.model.validation) | length %}
+    #[validate({{ m::get_validation(validation = param.model.validation, regex_path="super::model::") }})]
+    {% endif %}
+    {%- endif %}
 	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
 	pub {{ m::property_name(name = param.name) }}: {{ m::type(property = param.model) }},
 	{% endfor %}
@@ -152,7 +157,7 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
                 {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
 				{{ endpoint.operation | pascalcase }}Response::Status{{ response.statusCode }}
                 {%- if response.models -%}
-                    (model) => 
+                    (model) =>
                     {% if filtered_response_headers | length > 0 %}
                     {
                         let mut response = {{ e::into_response(response = response, name = "model.body") }};
@@ -175,7 +180,7 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
                     {% else %}
                     {{ e::into_response(response = response, name = "model") }}
                     {% endif %}
-                    
+
                 {%- elif filtered_response_headers | length > 0 %}(h) => {
                     let mut response = StatusCode::from_u16({{ response.statusCode }}).unwrap().into_response();
                     let headers = response.headers_mut();
