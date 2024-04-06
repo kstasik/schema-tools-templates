@@ -1,0 +1,6 @@
+createLocation:
+  required: true
+  content:
+    application/json:
+      schema:
+        $ref: schemas.yaml#/Location

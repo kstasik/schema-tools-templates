@@ -10,7 +10,7 @@ jobs:
   check:
     strategy:
       matrix:
-        tests: [ rust, rust-axum ]
+        tests: [ rust, rust-axum, rust-axum-relaxed ]
     name: Check rust sample application (${{ matrix.tests }})
     runs-on: ubuntu-latest
     steps:
@@ -35,7 +35,7 @@ jobs:
   test:
     strategy:
       matrix:
-        tests: [ rust, rust-axum ]
+        tests: [ rust, rust-axum, rust-axum-relaxed ]
     name: Test rust sample application (${{ matrix.tests }})
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,338 @@
+openapi: 3.0.0
+info:
+  version: 0.1.0
+  title: Management Api
+tags:
+  - name: health
+    description: Healtcheck endpoints 
+  - name: devices
+    description: Device related endpoints
+  - name: accessories
+    description: Accessories related endpoints
+security:
+  - basicAuth: []
+components:
+  schemas:
+    TraceState:
+      $ref: types.yaml#/TraceState
+    TraceParent:
+      $ref: types.yaml#/TraceParent
+    Pagination:
+      $ref: types.yaml#/Pagination
+    ServiceStatus:
+      $ref: components/schemas.yaml#/ServiceStatus
+    Device:
+      $ref: components/devices/schemas.yaml#/Device
+    Accessory:
+      $ref: components/accessories/schemas.yaml#/Accessory
+    AccessoryCreateError:
+      $ref: components/accessories/schemas.yaml#/CreateAccessoryError
+    KindDiscriminatorSimple:
+      $ref: components/locations/schemas.yaml#/KindDiscriminatorSimple
+    KindDiscriminatorComplex:
+      $ref: components/locations/schemas.yaml#/KindDiscriminatorComplex
+    KindDiscriminatorSemi:
+      $ref: components/locations/schemas.yaml#/KindDiscriminatorSemi
+    KindInternallyTaggedComplex:
+      $ref: components/locations/schemas.yaml#/KindInternallyTaggedComplex
+    KindUntaggedComplex:
+      $ref: components/locations/schemas.yaml#/KindUntaggedComplex
+    Location:
+      $ref: components/locations/schemas.yaml#/Location
+
+  responses:
+    # common
+    internalServerError500:
+      $ref: components/responses.yaml#/internalServerError500
+    forbidden403:
+      $ref: components/responses.yaml#/forbidden403
+
+    # health responses
+    livez200:
+      $ref: components/responses.yaml#/livez200
+    livez500:
+      $ref: components/responses.yaml#/livez500
+    readyz200:
+      $ref: components/responses.yaml#/readyz200
+    readyz500:
+      $ref: components/responses.yaml#/readyz500
+
+    # devices
+    getDevice200:
+      $ref: components/devices/responses.yaml#/getDevice200
+    getDevice400:
+      $ref: components/devices/responses.yaml#/getDevice400
+    listDevices200:
+      $ref: components/devices/responses.yaml#/listDevices200
+    listDevices400:
+      $ref: components/devices/responses.yaml#/listDevices400
+    createDevice201:
+      $ref: components/devices/responses.yaml#/createDevice201
+    createDevice400:
+      $ref: components/devices/responses.yaml#/createDevice400
+    createDevice409:
+      $ref: components/devices/responses.yaml#/createDevice409
+
+    # locations
+    getLocation200:
+      $ref: components/locations/responses.yaml#/getLocation200
+    getLocation400:
+      $ref: components/locations/responses.yaml#/getLocation400
+    createLocation200:
+      $ref: components/locations/responses.yaml#/createLocation200
+    createLocation409:
+      $ref: components/locations/responses.yaml#/createLocation409
+    createLocation400:
+      $ref: components/locations/responses.yaml#/createLocation400
+
+    # accessories
+    getAccessory200:
+      $ref: components/accessories/responses.yaml#/getAccessory200
+    getAccessoryLog200:
+      $ref: components/accessories/responses.yaml#/getAccessoryLog200
+    getAccessory400:
+      $ref: components/accessories/responses.yaml#/getAccessory400
+    createAccessory200:
+      $ref: components/accessories/responses.yaml#/createAccessory200
+    createAccessory409:
+      $ref: components/accessories/responses.yaml#/createAccessory409
+    createAccessory400:
+      $ref: components/accessories/responses.yaml#/createAccessory400
+
+  requestBodies:
+    createDevice:
+      $ref: components/devices/request-bodies.yaml#/createDevice
+    createAccessory:
+      $ref: components/accessories/request-bodies.yaml#/createAccessory
+    createLocation:
+      $ref: components/locations/request-bodies.yaml#/createLocation
+
+  parameters:
+    traceParentHeader:
+      $ref: components/parameters.yaml#/traceParentHeader
+    traceStateHeader:
+      $ref: components/parameters.yaml#/traceStateHeader
+    listDevicesFilterQuery:
+      $ref: components/devices/parameters.yaml#/listDevicesFilterQuery
+    listDevicesSortQuery:
+      $ref: components/devices/parameters.yaml#/listDevicesSortQuery
+    listDevicesPageQuery:
+      $ref: components/devices/parameters.yaml#/listDevicesPageQuery
+    listDevicesForQuery:
+      $ref: components/devices/parameters.yaml#/listDevicesForQuery
+    deviceIdPath:
+      $ref: components/devices/parameters.yaml#/deviceIdPath
+    accessoryIdPath:
+      $ref: components/accessories/parameters.yaml#/accessoryIdPath
+    locationIdPath:
+      $ref: components/locations/parameters.yaml#/locationIdPath
+
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+
+paths:
+  # healthchecks
+  /livez:
+    get:
+      tags:
+        - health
+      description: Indicates if service is working correctly.
+      operationId: isLive
+      security: [] # insecure
+      responses:
+        200:
+          $ref: '#/components/responses/livez200'
+        500:
+          $ref: '#/components/responses/livez500'
+  /readyz:
+    get:
+      tags:
+        - health
+      description: Indicates if service is ready to handle requests.
+      operationId: isReady
+      security: [] # insecure
+      responses:
+        200:
+          $ref: '#/components/responses/readyz200'
+        500:
+          $ref: '#/components/responses/readyz500'
+
+  # devices
+  /v1/devices:
+    get:
+      tags:
+        - devices
+      description: Get all devices
+      operationId: getDevices
+      responses:
+        200:
+          $ref: '#/components/responses/listDevices200'
+        400:
+          $ref: '#/components/responses/listDevices400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/listDevicesFilterQuery'
+        - $ref: '#/components/parameters/listDevicesSortQuery'
+        - $ref: '#/components/parameters/listDevicesPageQuery'
+        - $ref: '#/components/parameters/listDevicesForQuery'
+    post:
+      tags:
+        - devices
+      description: Create device
+      operationId: createDevice
+      responses:
+        201:
+          $ref: '#/components/responses/createDevice201'
+        400:
+          $ref: '#/components/responses/createDevice400'
+        409:
+          $ref: '#/components/responses/createDevice409'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+      requestBody:
+        $ref: '#/components/requestBodies/createDevice'
+ 
+  /v1/devices/{deviceId}:
+    get:
+      tags:
+        - devices
+      description: Get device by id
+      operationId: getDevice
+      responses:
+        200:
+          $ref: '#/components/responses/getDevice200'
+        400:
+          $ref: '#/components/responses/getDevice400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/deviceIdPath'
+
+  # accessories
+  /v1/accessories:
+    post:
+      tags:
+        - accessories
+      description: Create accessories
+      operationId: createAccessory
+      responses:
+        200:
+          $ref: '#/components/responses/createAccessory200'
+        400:
+          $ref: '#/components/responses/createAccessory400'
+        409:
+          $ref: '#/components/responses/createAccessory409'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+      requestBody:
+        $ref: '#/components/requestBodies/createAccessory'
+
+  /v1/accessories/{accessoryId}:
+    get:
+      tags:
+        - accessories
+      description: Get all accessories
+      operationId: getAccessory
+      responses:
+        200:
+          $ref: '#/components/responses/getAccessory200'
+        400:
+          $ref: '#/components/responses/getAccessory400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/accessoryIdPath'
+        - in: header
+          name: secret
+          schema:
+            type: string
+          required: true
+
+  /v1/accessories/{accessoryId}/log:
+    get:
+      tags:
+        - accessories
+      description: Get acessory log
+      operationId: getAccessoryLog
+      responses:
+        200:
+          $ref: '#/components/responses/getAccessoryLog200'
+        400:
+          $ref: '#/components/responses/getAccessory400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/accessoryIdPath'
+
+  /v1/locations/{locationId}:
+    get:
+      tags:
+        - locations
+      description: Get all locations
+      operationId: getLocation
+      responses:
+        200:
+          $ref: '#/components/responses/getLocation200'
+        400:
+          $ref: '#/components/responses/getLocation400'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/locationIdPath'
+
+  # locations
+  /v1/locations:
+    post:
+      tags:
+        - locations
+      description: Create location
+      operationId: createLocation
+      responses:
+        200:
+          $ref: '#/components/responses/createLocation200'
+        400:
+          $ref: '#/components/responses/createLocation400'
+        409:
+          $ref: '#/components/responses/createLocation409'
+        403:
+          $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+      requestBody:
+        $ref: '#/components/requestBodies/createLocation'

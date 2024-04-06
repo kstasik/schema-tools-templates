@@ -1,0 +1,32 @@
+Device:
+  additionalProperties: false
+  type: object
+  required:
+    - deviceId 
+    - deviceClassType
+    - remoteId
+  properties:
+    deviceId:
+      type: string
+    deviceClassType:
+      type: integer
+      enum: [0, 5, 10, 15, 20, 30, 50, 100]
+    remoteId:
+      type: string
+      format: uuid
+    updatedAt:
+      type: string
+      format: date-time
+    ratio:
+      type: number
+    custom:
+      type: array
+      items:
+        - type: string
+          description: x coordinate
+        - type: string
+          description: y coordinate
+      x-type: crate::Coordinates
+    limitedText:
+      type: string
+      minLength: 10

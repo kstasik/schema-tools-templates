@@ -1,0 +1,17 @@
+Accessory:
+  additionalProperties: false
+  type: object
+  required:
+    - accessoryId 
+  properties:
+    accessoryId:
+      type: string
+
+CreateAccessoryError:
+  allOf:
+    - $ref: ../../types.yaml#/ErrorResource
+    - properties:
+        error:
+          properties:
+            code:
+              enum: [ 'not-found', 'validation-error', 'conflict-error' ]
