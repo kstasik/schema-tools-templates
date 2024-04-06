@@ -1,4 +1,4 @@
-on: 
+on:
   pull_request: {}
   push:
     branches:
@@ -7,52 +7,11 @@ on:
 name: test
 
 jobs:
-  checkr:
-    name: Check rust sample application (actix)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Install protobuf
-        run: sudo apt-get install -y protobuf-compiler libprotobuf-dev
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: make codegen
-        working-directory: ./tests/rust
-      - name: Run cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --manifest-path ./tests/rust/Cargo.toml
-
-  testr:
-    name: Test rust sample application (actix)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Install protobuf
-        run: sudo apt-get install -y protobuf-compiler libprotobuf-dev
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: make codegen
-        working-directory: ./tests/rust
-      - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path ./tests/rust/Cargo.toml
-
   check:
-    name: Check rust sample application (axum)
+    strategy:
+      matrix:
+        tests: [ rust, rust-axum ]
+    name: Check rust sample application (${{ matrix.tests }})
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -66,15 +25,18 @@ jobs:
           toolchain: stable
           override: true
       - run: make codegen
-        working-directory: ./tests/rust-axum
+        working-directory: ./tests/${{ matrix.tests }}
       - name: Run cargo check
         uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --manifest-path ./tests/rust-axum/Cargo.toml
+          args: --manifest-path ./tests/${{ matrix.tests }}/Cargo.toml
 
   test:
-    name: Test rust sample application (axum)
+    strategy:
+      matrix:
+        tests: [ rust, rust-axum ]
+    name: Test rust sample application (${{ matrix.tests }})
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -88,11 +50,11 @@ jobs:
           toolchain: stable
           override: true
       - run: make codegen
-        working-directory: ./tests/rust-axum
+        working-directory: ./tests/${{ matrix.tests }}
       - name: Run cargo test
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path ./tests/rust-axum/Cargo.toml
-  
+          args: --manifest-path ./tests/${{ matrix.tests }}/Cargo.toml
+
   # todo: consider adding lint, clippy, fmt and fixing all issues
