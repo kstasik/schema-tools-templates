@@ -28,7 +28,7 @@ pub struct Coordinates (pub f64, pub f64);
 mod api;
 mod client;
 mod handler {
-    
+
 
     use axum::extract::State;
     use uuid::uuid;
@@ -580,7 +580,7 @@ mod tests {
         if let ClientError::Error(super::client::devices::endpoint::DeviceCreateV1Error::Error409(headers)) = error {
             let expected = reqwest::header::HeaderValue::from_static("/v1/devices/654");
             assert_eq!(headers.get("location"), Some(&expected));
-        } 
+        }
 
 
         let mut headers = reqwest::header::HeaderMap::new();
