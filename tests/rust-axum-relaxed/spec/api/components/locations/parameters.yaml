@@ -1,0 +1,50 @@
+locationIdPath:
+  in: path 
+  name: locationId
+  required: true
+  schema:
+    type: string
+
+listLocationsFilterQuery:
+  name: filter
+  description: Filter devices
+  in: query
+  required: false
+  style: deepObject
+  schema:
+    type: object
+    additionalProperties: false
+    properties:
+      locationId:
+        type: string
+
+listLocationsSortQuery:
+  name: sort
+  description: Sort locations
+  in: query
+  required: false
+  style: deepObject
+  schema:
+    type: object
+    additionalProperties: false
+    properties:
+      locationId:
+        type: string
+        enum: ['asc', 'desc']
+
+listLocationsPageQuery:
+  name: page
+  description: Page of results
+  in: query
+  required: false
+  schema:
+    type: integer
+    minimum: 1
+
+listLocationsForQuery:
+  name: for
+  description: Test of reserved word in most languages
+  in: query
+  required: false
+  schema:
+    type: string

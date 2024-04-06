@@ -1,0 +1,6 @@
+accessoryIdPath:
+  in: path 
+  name: accessoryId
+  required: true
+  schema:
+    type: string

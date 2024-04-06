@@ -1,0 +1,176 @@
+Location:
+  additionalProperties: false
+  type: object
+  required:
+    - locationId 
+  properties:
+    locationId:
+      type: string
+
+    simpleMixed:
+      oneOf:
+        - type: string
+        - type: number
+
+#    simpleMixed2:
+#      oneOf:
+#        - type: string
+#          const: first
+#        - type: string
+#          const: second
+#
+#    simpleMixed3:
+#      oneOf:
+#        - type: number
+#          const: 5
+#        - type: number
+#          const: 8
+
+    # swagger discriminator field
+    kindDiscriminator:
+      oneOf:
+        - $ref: '#/KindDiscriminatorSimple'
+        - $ref: '#/KindDiscriminatorComplex'
+        - $ref: '#/KindDiscriminatorSemi'
+      discriminator:
+        propertyName: testField
+        mapping:
+          simple: '#/KindDiscriminatorSimple'
+          complex: '#/KindDiscriminatorComplex'
+          semi: '#/KindDiscriminatorSemi'
+
+    # externally tagged autodetection
+    kindExternallyTagged:
+      oneOf:
+        - type: object
+          required: ['simple']
+          properties:
+            simple:
+              $ref: '#/KindExternallyTaggedSimple'
+        - type: object
+          required: ['complex']
+          properties:
+            complex:
+              $ref: '#/KindExternallyTaggedComplex'
+        - type: object
+          required: ['mixed']
+          properties:
+            mixed:
+              type: string
+
+    # internally tagged autodetection
+    kindInternallyTagged:
+      oneOf:
+        - $ref: '#/KindInternallyTaggedSimple'
+        - $ref: '#/KindInternallyTaggedComplex'
+
+    # internally tagged autodetection
+    kindInternallyTaggedInline:
+      oneOf:
+        - type: object
+          required: ['kind', 'nameB']
+          properties:
+            kind:
+              const: SIMPLE
+            nameB:
+              type: string
+        - type: object
+          required: ['kind', 'nameB']
+          properties:
+            kind:
+              const: COMPLEX
+            nameB:
+              type: string
+
+    # untagged
+    unTagged:
+      oneOf:
+        - $ref: '#/KindUntaggedSimple'
+        - $ref: '#/KindUntaggedComplex'
+
+    unTaggedMixed:
+      oneOf:
+        - $ref: '#/KindUntaggedMixedSimple'
+        - type: string
+
+KindDiscriminatorSimple:
+  type: object
+  required: ['name','testField']
+  properties:
+    testField:
+      type: string
+    name:
+      type: string
+
+KindDiscriminatorComplex:
+  type: object
+  required: ['name','testField']
+  properties:
+    testField:
+      type: string
+    name:
+      type: string
+
+KindDiscriminatorSemi:
+  type: object
+  required: ['testField']
+  properties:
+    testField:
+      type: string
+
+KindExternallyTaggedSimple:
+  type: object
+  required: ['nameA']
+  properties:
+    nameA:
+      type: string
+
+KindExternallyTaggedComplex:
+  type: object
+  required: ['nameB']
+  properties:
+    nameB:
+      type: string
+
+KindInternallyTaggedSimple:
+  type: object
+  required: ['kind', 'nameB']
+  properties:
+    kind:
+      const: SIMPLE
+    nameB:
+      type: string
+  
+KindInternallyTaggedComplex:
+  type: object
+  required: ['kind', 'nameB']
+  properties:
+    kind:
+      const: COMPLEX
+    nameB:
+      type: string
+
+KindUntaggedSimple:
+  type: object
+  required: ['kind', 'nameB']
+  properties:
+    kind:
+      const: SIMPLE
+    nameB:
+      type: string
+  
+KindUntaggedComplex:
+  type: object
+  required: ['nameB']
+  properties:
+    nameB:
+      type: string
+
+KindUntaggedMixedSimple:
+  type: object
+  required: ['kind', 'nameB']
+  properties:
+    kind:
+      const: SIMPLE
+    nameB:
+      type: string

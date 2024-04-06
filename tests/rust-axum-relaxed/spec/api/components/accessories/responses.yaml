@@ -1,0 +1,150 @@
+getAccessory200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+    X-Hash-Key:
+      required: true
+      schema:
+        type: string
+  content:
+    application/json:
+      schema:
+        title: GetAccessoryResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Accessory
+
+getAccessory400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+    X-Hash-Key:
+      required: true
+      schema:
+        type: string
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/ErrorResource
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
+getAccessories200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        title: GetAccessoriesResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Device
+
+getAccessories400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        allOf:
+          - $ref: ../../types.yaml#/MultipleResources
+          - properties:
+              error:
+                properties:
+                  code:
+                    enum: [ 'not-found', 'validation-error' ]
+
+createAccessory200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+    X-Hash-Key:
+      required: true
+      schema:
+        type: string
+  content:
+    application/json:
+      schema:
+        title: CreateAccessoryResponse
+        allOf:
+          - $ref: ../../types.yaml#/SingleResource
+          - properties:
+              data:
+                $ref: schemas.yaml#/Accessory
+
+createAccessory400:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/CreateAccessoryError
+
+createAccessory409:
+  description: Operation failed.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    application/json:
+      schema:
+        $ref: ./schemas.yaml#/CreateAccessoryError
+
+getAccessoryLog200:
+  description: Operation succeeded.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content:
+    text/plain:
+      schema:
+        type: string

@@ -1,0 +1,26 @@
+ServiceStatus:
+  type: object
+  required:
+    - status
+    - components 
+  properties:
+    status:
+      $ref: '#/Status'
+    components:
+      type: array
+      minItems: 0
+      items:
+        type: object
+        required: ['status', 'name']
+        properties:
+          status:
+            $ref: '#/Status'
+          name:
+            type: string
+        additionalProperties: false
+  additionalProperties: false
+
+Status:
+  type: string
+  enum: ['UP', 'DOWN', '1N']
+  default: 'DOWN'
