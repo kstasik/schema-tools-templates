@@ -60,8 +60,8 @@
 
 {% macro get_validation(validation, regex_path="") %}{% filter nospaces %}
     {% if validation.format and validation.format in ["decimal", "uuid"] %}{% else %}
-    {% if validation.maxLength %}length(max = {{ validation.maxLength }}), {% endif %}
-    {% if validation.minLength %}length(min = {{ validation.minLength }}), {% endif %}
+    {% if validation.minLength %}length(min = {{ validation.minLength }}{% if validation.maxLength %}, max = {{ validation.maxLength }}{% endif %}), {% endif %}
+    {% if validation.maxLength and not validation.minLength %}length(max = {{ validation.maxLength }}), {% endif %}
     {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
     {% if validation.pattern %}regex(path = *{{ regex_path }}{{ validation.pattern.name | snakecase | upper }}), {% endif %}
     {% if validation.minimum is defined or validation.maximum is defined %}
