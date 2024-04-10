@@ -74,6 +74,32 @@
     {% endif %}
 {% endfilter %}{% endmacro get_validation %}
 
+{% macro model_validation(model, options, regex_path="") %}{% filter nospaces %}
+    {%- if not options.skipValidate %}
+        {%- if model.validation and model.type != 'enum' %}
+            {%- if self::get_validation(validation = model.validation) | length %}
+                #[garde({{ self::get_validation(validation = model.validation, regex_path = regex_path) }})]
+            {%- else %}
+                #[garde(skip)]
+            {%- endif %}
+        {%- elif self::need_nested_validation(property=model) %}
+            #[garde(dive)]
+        {%- else %}
+            #[garde(skip)]
+        {%- endif %}
+    {%- endif %}
+{% endfilter %}{% endmacro model_validation %}
+
+{% macro enum_validation(option, options, regex_path="") %}{% filter nospaces %}
+    {%- if not options.skipValidate %}
+        {%- if option.x._discriminator.value.model %}
+            #[garde(dive)]
+        {%- else %}
+            #[garde(skip)]
+        {%- endif %}
+    {%- endif %}
+{% endfilter %}{% endmacro model_validation %}
+
 {% macro type(property, ns="") %}{% filter nospaces %}
 {% if property.nullable %}Option<{% endif %}
 

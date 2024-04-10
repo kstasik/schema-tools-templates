@@ -30,19 +30,7 @@ pub static {{ regexp.name | snakecase | upper }}: Lazy<Regex> = Lazy::new(|| { R
 pub struct {{ m::model_name(name = model.object.name) }} {
     {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") -%}
     {% for property in filtered_properties -%}
-    {%- if not options.skipValidate %}
-    {%- if property.validation and property.type != 'enum' %}
-    {%- if m::get_validation(validation = property.validation) | length %}
-    #[garde({{ m::get_validation(validation = property.validation) }})]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
-    {%- elif m::need_nested_validation(property=property) %}
-    #[garde(dive)]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
-    {%- endif %}
+    {{- m::model_validation(model = property, options = options) }}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
     pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
     {%- endfor %}
@@ -133,18 +121,16 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 
 {%- elif model.wrapper %}
 {% if model.wrapper.strategy and model.wrapper.strategy == "externally" %}
-#[derive(Debug, Clone, Validate, Deserialize, Serialize)]
+#[derive(Debug, Clone, {% if not options.skipValidate %}Validate, {% endif %}Deserialize, Serialize)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
     #[serde(rename = "{{ option.x._discriminator.property }}")]
     {{ option.x._discriminator.property | pascalcase }}(
         {%- if option.x._discriminator.value.model -%}
-        {%- if not options.skipValidate %}{%- if m::need_nested_validation(property=option) %}
-            #[garde(dive)]
-        {%- endif %}{%- endif %}
+        {{- m::enum_validation(option = option, options = options) }}
         {{ option.x._discriminator.value.model }}
         {%- elif option.x._discriminator.value.simple -%}
-        {%- if not options.skipValidate %}#[garde(skip)]{%- endif %}
+        {{- m::enum_validation(option = option, options = options) }}
         {{ m::type(property = option.x._discriminator.value.simple) }}
         {%- endif -%}
     ),
@@ -152,22 +138,22 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
 }
 
 {% elif model.wrapper.strategy.internally %}
-#[derive(Debug, Clone, Validate, Deserialize, Serialize)]
+#[derive(Debug, Clone, {% if not options.skipValidate %}Validate, {% endif %}Deserialize, Serialize)]
 #[serde(tag = "{{ model.wrapper.strategy.internally }}")]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
     #[serde(rename = "{{ option.x._discriminator.value.model }}")]
-    {{ option.x._discriminator.value.model | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({%- if not options.skipValidate %}{%- if m::need_nested_validation(property=option) %}#[garde(dive)] {% else %}#[garde(skip)] {% endif -%}{% endif -%}{{ m::type(property = option) }}){% endif %},
+    {{ option.x._discriminator.value.model | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({{- m::enum_validation(option = option, options = options) }}{{ m::type(property = option) }}){% endif %},
     {% endfor %}
 }
 
 {% else -%}
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+#[derive(Debug, Clone, {% if not options.skipValidate %}Validate, {% endif %}Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
-    {{ m::type(property = option) | pascalcase }}({%- if not options.skipValidate %}{%- if m::need_nested_validation(property=option) %}
-        #[garde(dive)]{% else %}#[garde(skip)]{%- endif %}{%- endif %}
+    {{ m::type(property = option) | pascalcase }}(
+        {{- m::enum_validation(option = option, options = options) }}
         {{ m::type(property = option) }}
     ),
     {% endfor %}
