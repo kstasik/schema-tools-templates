@@ -62,8 +62,9 @@
     {% if validation.format and validation.format in ["decimal", "uuid"] %}{% else %}
     {% if validation.minLength %}length(min = {{ validation.minLength }}{% if validation.maxLength %}, max = {{ validation.maxLength }}{% endif %}), {% endif %}
     {% if validation.maxLength and not validation.minLength %}length(max = {{ validation.maxLength }}), {% endif %}
-    {% if validation.minItems %}length(min = {{ validation.minItems }}), {% endif %}
-    {% if validation.pattern %}regex(path = *{{ regex_path }}{{ validation.pattern.name | snakecase | upper }}), {% endif %}
+    {% if validation.minItems %}length(min = {{ validation.minItems }}{% if validation.maxItems %}, max = {{ validation.maxItems }}{% endif %}), {% endif %}
+    {% if validation.maxItems and not validation.minItems %}length(max = {{ validation.maxItems }}), {% endif %}
+    {% if validation.pattern %}pattern({{ regex_path }}{{ validation.pattern.name | snakecase | upper }}), {% endif %}
     {% if validation.minimum is defined or validation.maximum is defined %}
     range(
         {% if validation.minimum is defined %}min = {{ validation.minimum }}{% if validation.maximum is defined %}, {% endif %}{% endif %}
