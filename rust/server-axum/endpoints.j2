@@ -32,20 +32,10 @@ impl IntoResponse for FailedToDeserializeQuery {
 {% if endpoint.parameters.path | length > 0 -%}
 /// {{ endpoint.method | upper }} {{ endpoint.path }}
 /// path parameters
-#[derive(Validate, Deserialize)]
+#[derive({% if not options.skipValidate %}Validate, {% endif %}Deserialize)]
 pub struct {{ endpoint.operation | pascalcase }}Path{
 	{%- for param in endpoint.parameters.path %}
-    {%- if param.model.validation and param.model.type != 'enum' %}
-    {%- if m::get_validation(validation = param.model.validation) | length %}
-    #[garde({{ m::get_validation(validation = param.model.validation, regex_path="super::model::") }})]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
-    {%- elif m::need_nested_validation(property=param.model) %}
-    #[garde(dive)]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
+    {{- m::model_validation(model = param.model, options = options, regex_path="super::model::") }}
 	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
 	pub {{ m::property_name(name = param.name) }}: {{ m::type(property = param.model) }},
 	{% endfor %}
@@ -58,20 +48,10 @@ pub struct {{ endpoint.operation | pascalcase }}Path{
 
 /// {{ endpoint.method | upper }} {{ endpoint.path }}
 /// query parameters
-#[derive(Validate, Deserialize{% if object_all_optional %},Default{% endif %})]
+#[derive({% if not options.skipValidate %}Validate, {% endif %}Deserialize{% if object_all_optional %},Default{% endif %})]
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{%- for param in endpoint.parameters.query %}
-    {%- if param.model.validation and param.model.type != 'enum' %}
-    {%- if m::get_validation(validation = param.model.validation) | length %}
-    #[garde({{ m::get_validation(validation = param.model.validation) }})]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
-    {%- elif m::need_nested_validation(property=param.model) %}
-    #[garde(dive)]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
+    {{- m::model_validation(model = param.model, options = options, regex_path="super::model::") }}
 	{%- if param.style == 'form' and param.explode == false %}
 	#[serde(rename = "{{ param.name }}", deserialize_with = "deserialized_id_list"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
 	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}Vec<{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %}>,
@@ -89,20 +69,10 @@ pub struct {{ endpoint.operation | pascalcase }}Query{
 {%- if filtered_headers | length > 0 %}
 /// {{ endpoint.method | upper }} {{ endpoint.path }}
 /// request headers
-#[derive(Validate, Deserialize)]
+#[derive({% if not options.skipValidate %}Validate, {% endif %}Deserialize)]
 pub struct {{ endpoint.operation | pascalcase }}RequestHeaders{
 	{%- for param in filtered_headers %}
-    {%- if param.model.validation and param.model.type != 'enum' %}
-    {%- if m::get_validation(validation = param.model.validation) | length %}
-    #[garde({{ m::get_validation(validation = param.model.validation) }})]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
-    {%- elif m::need_nested_validation(property=param.model) %}
-    #[garde(dive)]
-    {%- else %}
-    #[garde(skip)]
-    {%- endif %}
+    {{- m::model_validation(model = param.model, options = options, regex_path="super::model::") }}
 	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
 	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %},
 	{% endfor %}
