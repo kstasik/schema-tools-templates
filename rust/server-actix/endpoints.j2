@@ -34,11 +34,12 @@ pub struct {{ endpoint.operation | pascalcase }}Path{
 #[derive({% if not options.skipValidate %}Validate, {% endif %}Deserialize{% if object_all_optional %},Default{% endif %})]
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{% for param in endpoint.parameters.query %}
-    {{- m::model_validation(model = param.model, options = options, regex_path="super::model::") }}
 	{% if param.style == 'form' and param.explode == false %}
+    {{ m::model_validation(model = param.model, options = options, regex_path="super::model::", style="form") }}
 	#[serde(rename = "{{ param.name }}", deserialize_with = "deserialized_id_list"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
 	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}Vec<{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %}>,
 	{% else %}
+    {{ m::model_validation(model = param.model, options = options, regex_path="super::model::") }}
 	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
 	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %},
 	{% endif %}
