@@ -73,6 +73,7 @@ mod handler {
                     None,
                     None,
                     None,
+                    None,
                 )],
             }));
         }
@@ -101,6 +102,7 @@ mod handler {
                     None,
                     None,
                     None,
+                    None,
                 )],
             }));
         } else if query.page.unwrap_or(0) == 2 {
@@ -113,6 +115,7 @@ mod handler {
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
                     None,
                     None,
                     None,
@@ -151,6 +154,7 @@ mod handler {
                 "test".to_string(),
                 api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
                 None,
                 None,
                 None,
@@ -561,6 +565,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             ))
             .await;
 
@@ -595,6 +600,7 @@ mod tests {
                 "conflict".to_string(),
                 super::client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType15,
                 uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                None,
                 None,
                 None,
                 None,
@@ -703,6 +709,7 @@ mod tests {
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: None,
                 ratio: Some(10f64),
+                features: None,
                 custom: None,
                 limited_text: None,
             }
@@ -729,6 +736,7 @@ mod tests {
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: Some(Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap()),
                 ratio: Some(10f64),
+                features: None,
                 custom: None,
                 limited_text: None,
             }
@@ -756,6 +764,7 @@ mod tests {
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: Some(Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap()),
                 ratio: Some(10f64),
+                features: None,
                 custom: Some(Coordinates(0.5f64, 0.8f64)),
                 limited_text: None,
             }
@@ -784,6 +793,7 @@ mod tests {
                 remote_id: uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
                 updated_at: None,
                 ratio: Some(10f64),
+                features: Some(vec!["usb".to_string()]),
                 custom: None,
                 limited_text: None,
             }

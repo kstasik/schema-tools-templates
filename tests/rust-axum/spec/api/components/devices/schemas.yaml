@@ -2,7 +2,7 @@ Device:
   additionalProperties: false
   type: object
   required:
-    - deviceId 
+    - deviceId
     - deviceClassType
     - remoteId
   properties:
@@ -19,6 +19,13 @@ Device:
       format: date-time
     ratio:
       type: number
+    features:
+      type: array
+      minItems: 1
+      items:
+        type: string
+        minLength: 1
+        description: single feature of device
     custom:
       type: array
       items:

@@ -1,5 +1,5 @@
 deviceIdPath:
-  in: path 
+  in: path
   name: deviceId
   required: true
   schema:
