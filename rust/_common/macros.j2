@@ -84,7 +84,11 @@
                 #[garde(
                     {{ self::get_validation(validation = model.validation, regex_path = regex_path, form = style == "form") }}
                     {%- if model.type == "array" and model.model.validation and model.model.type != "enum" %}
+                        {% if not model.required -%}inner({%- endif -%}
+                        {%- if model.nullable -%}inner({%- endif -%}
                         inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path) }})
+                        {%- if model.nullable -%}){%- endif %}
+                        {%- if not model.required -%}){%- endif %}
                     {% endif %}
                 )]
             {%- else %}
@@ -92,7 +96,13 @@
             {%- endif %}
         {%- elif model.type == 'array' and model.model.validation and model.model.type != "enum" %}
             {%- if self::get_validation(validation = model.model.validation, form = style == "form") | length %}
-                #[garde(inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, form = style == "form") }}))]
+                #[garde(
+                    {%- if not model.required -%}inner({%- endif -%}
+                    {%- if model.nullable -%}inner({%- endif -%}
+                    inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, form = style == "form") }})
+                    {%- if model.nullable -%}){%- endif %}
+                    {%- if not model.required -%}){%- endif -%}
+                )]
             {%- else %}
                 #[garde(skip)]
             {%- endif %}
