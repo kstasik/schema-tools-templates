@@ -36,7 +36,7 @@ pub struct {{ endpoint.operation | pascalcase }}Query{
 	{% for param in endpoint.parameters.query %}
 	{% if param.style == 'form' and param.explode == false %}
     {{ m::model_validation(model = param.model, options = options, regex_path="super::model::", style="form") }}
-	#[serde(rename = "{{ param.name }}", deserialize_with = "deserialized_id_list"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
+	#[serde(rename = "{{ param.name }}", deserialize_with = {% if property.required %}"deserialized_id_list", skip_serializing_if = "Option::is_none"{% else %}"deserialized_opt_id_list"{% endif %})]
 	pub {{ m::property_name(name = param.name) }}: {% if not param.required %}Option<{% endif %}Vec<{{ m::type(property = param.model, ns = "super::model") }}{% if not param.required %}>{% endif %}>,
 	{% else %}
     {{ m::model_validation(model = param.model, options = options, regex_path="super::model::") }}
@@ -204,6 +204,44 @@ where
                 ids.push(id);
             }
             Ok(ids)
+        }
+    }
+
+    deserializer.deserialize_any(StringVecVisitor(std::marker::PhantomData::<I>))
+}
+
+pub fn deserialized_opt_id_list<'de, D, I>(deserializer: D) -> std::result::Result<Option<Vec<I>>, D::Error>
+where
+    D: de::Deserializer<'de>,
+    I: de::DeserializeOwned,
+{
+    struct StringVecVisitor<I>(std::marker::PhantomData<I>);
+
+    impl<'de, I> de::Visitor<'de> for StringVecVisitor<I>
+    where I: de::DeserializeOwned {
+        type Value = Option<Vec<I>>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a string containing a list")
+        }
+
+        fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let mut ids = Vec::new();
+            for id in v.split(',') {
+                let id = I::deserialize(id.into_deserializer())?;
+                ids.push(id);
+            }
+            Ok(Some(ids))
+        }
+
+        fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
         }
     }
 
