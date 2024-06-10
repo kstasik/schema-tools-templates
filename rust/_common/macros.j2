@@ -77,11 +77,12 @@
     {% endif %}
 {% endfilter %}{% endmacro get_validation %}
 
-{% macro model_validation(model, options, regex_path="", style="") %}{% filter nospaces %}
+{% macro model_validation(model, options, is_required=true, regex_path="", style="") %}{% filter nospaces %}
     {%- if not options.skipValidate %}
         {%- if model.validation and model.type != 'enum' %}
             {%- if self::get_validation(validation = model.validation, form = style == "form") | length %}
                 #[garde(
+                    {% if not is_required -%}inner({%- endif -%}
                     {{ self::get_validation(validation = model.validation, regex_path = regex_path, form = style == "form") }}
                     {%- if model.type == "array" and model.model.validation and model.model.type != "enum" %}
                         {% if not model.required -%}inner({%- endif -%}
@@ -90,6 +91,7 @@
                         {%- if model.nullable -%}){%- endif %}
                         {%- if not model.required -%}){%- endif %}
                     {% endif %}
+                    {%- if not is_required -%}){%- endif %}
                 )]
             {%- else %}
                 #[garde(skip)]
@@ -97,11 +99,13 @@
         {%- elif model.type == 'array' and model.model.validation and model.model.type != "enum" %}
             {%- if self::get_validation(validation = model.model.validation, form = style == "form") | length %}
                 #[garde(
+                    {%- if not is_required -%}inner({%- endif -%}
                     {%- if not model.required -%}inner({%- endif -%}
                     {%- if model.nullable -%}inner({%- endif -%}
                     inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, form = style == "form") }})
                     {%- if model.nullable -%}){%- endif %}
                     {%- if not model.required -%}){%- endif -%}
+                    {%- if not is_required -%}){%- endif -%}
                 )]
             {%- else %}
                 #[garde(skip)]
