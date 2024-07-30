@@ -210,13 +210,17 @@ pub mod producer {
     use super::manager::RabbitmqManager;
 
     {% if "tracing" in apm %}
-    use tracing::Span;
-    use tracing::Instrument;
+    {% set_global apm_prefix = options.apmPrefix | default(value = "") %}
+    {%- if apm_prefix != "" %}
+    use {{ apm_prefix }}tracing;
+    {%- endif %}
+    use {{ apm_prefix }}tracing::Span;
+    use {{ apm_prefix }}tracing::Instrument;
     {% if "opentelemetry" in apm %}
     use super::super::{SPAN_STATUS_ERROR, SPAN_STATUS_OK};
-    use opentelemetry::propagation::TextMapPropagator;
-    use opentelemetry_sdk::propagation::TraceContextPropagator;
-    use tracing_opentelemetry::OpenTelemetrySpanExt;
+    use {{ apm_prefix }}opentelemetry::propagation::TextMapPropagator;
+    use {{ apm_prefix }}opentelemetry_sdk::propagation::TraceContextPropagator;
+    use {{ apm_prefix }}tracing_opentelemetry::OpenTelemetrySpanExt;
     {% endif %}
     {% endif %}
 
@@ -608,7 +612,7 @@ pub mod consumer {
                 .headers()
                 .clone()
                 .ok_or(MessageReceiveError::MissingHeaders)?; // todo: try to get rid of this clone
-            
+
             let data = std::str::from_utf8(&delivery.data)
                 .map_err(|_| MessageReceiveError::Utf8PayloadError)?;
 
@@ -668,7 +672,7 @@ pub mod consumer {
                         "Cannot execute handler: {:?} (message acked)",
                         err
                     );
-                    
+
                     Box::pin(async move {
                         if let Err(err) = delivery
                             .ack(lapin::options::BasicAckOptions::default())
