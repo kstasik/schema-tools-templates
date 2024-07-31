@@ -187,7 +187,7 @@ mod handler {
         request: api::model::Device,
         State(state): State<AppState>,
     ) -> api::endpoint::DeviceCreateV1Response {
-        if let Err(_) = request.validate(&()) {
+        if let Err(_) = request.validate() {
             return api::endpoint::DeviceCreateV1Response::Status400(
                 api::model::CreateDevice400Response::new(
                     api::model::CreateDevice400ResponseError::new(
