@@ -134,7 +134,7 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
     #[serde(rename = "{{ option.x._discriminator.property }}")]
     {{ option.x._discriminator.property | pascalcase }}(
         {%- if option.x._discriminator.value.model -%}
-        {{ option.x._discriminator.value.model }}
+        {{ option.x._discriminator.value.model.name }}{% if option.x._discriminator.value.model.kind == 'string' %}Variant{% endif %}
         {%- elif option.x._discriminator.value.simple -%}
         {{ m::type(property = option.x._discriminator.value.simple) }}
         {%- endif -%}
@@ -147,8 +147,8 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
 #[serde(tag = "{{ model.wrapper.strategy.internally }}")]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
-    #[serde(rename = "{{ option.x._discriminator.value.model }}")]
-    {{ option.x._discriminator.value.model | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({{ m::type(property = option) }}){% endif %},
+    #[serde(rename = "{{ option.x._discriminator.value.model.name }}")]
+    {{ option.x._discriminator.value.model.name | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({{ m::type(property = option) }}){% endif %},
     {% endfor %}
 }
 
@@ -170,10 +170,10 @@ impl Validate for {{ m::model_name(name = model.wrapper.name) }} {
         match self {
             {% for option in model.wrapper.models -%}
             Self::{% if model.wrapper.strategy.internally -%}
-            {{ option.x._discriminator.value.model | pascalcase }}
+            {{ option.x._discriminator.value.model.name | pascalcase }}
             {%- else -%}
             {{ option.x._discriminator.property | pascalcase }}
-            {%- endif %}{% if option.x._discriminator.properties | default(value = 0) > 0 %}(d)  => {% if option.x._discriminator.value.model %}d.validate(),{% else %}Ok(()),{% endif %}{%else %} => Ok(()),{% endif %}
+            {%- endif %}{% if option.x._discriminator.properties | default(value = 0) > 0 %}(d)  => {% if option.x._discriminator.value.model.kind != 'string' %}d.validate(),{% else %}Ok(()),{% endif %}{%else %} => Ok(()),{% endif %}
             {% endfor %}
         }
     }
@@ -183,7 +183,7 @@ impl Validate for {{ m::model_name(name = model.wrapper.name) }} {
     fn validate(&self) -> Result<(), validator::ValidationErrors> {
         match self {
             {% for option in model.wrapper.models -%}
-            Self::{{ m::type(property = option) | pascalcase }}(d) => {% if option.model %}d.validate(),{% else %}Ok(()),{% endif %}
+            Self::{{ m::type(property = option) | pascalcase }}(d) => {% if option.model and option.type != 'enum' %}d.validate(),{% else %}Ok(()),{% endif %}
             {% endfor %}
         }
     }
