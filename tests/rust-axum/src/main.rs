@@ -844,6 +844,9 @@ mod tests {
                 name_b: "test".to_string(),
             })),
             un_tagged_mixed: Some(model::LocationUnTaggedMixedVariant::String("test".to_string())),
+            kind_externally_tagged_with_str_enum: Some(model::LocationKindExternallyTaggedWithStrEnumVariant::Str(
+                model::LocationKindExternallyTaggedWithStrEnumOption2StrVariant::Test1
+            ))
         };
 
         let original = serde_json::to_value(location.clone()).unwrap();
@@ -871,7 +874,10 @@ mod tests {
             "unTagged": {
               "nameB": "test"
             },
-            "unTaggedMixed": "test"
+            "unTaggedMixed": "test",
+            "kindExternallyTaggedWithStrEnum": {
+                "str": "test1"
+            }
           });
 
         // println!("original: {}", serde_json::to_string(&original).unwrap());
