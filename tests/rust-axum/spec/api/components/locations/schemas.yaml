@@ -93,6 +93,54 @@ Location:
         - $ref: '#/KindUntaggedMixedSimple'
         - type: string
 
+    # externally with string enum
+    kindExternallyTaggedWithStrEnum:
+      oneOf:
+        - type: object
+          required: ['simple']
+          properties:
+            simple:
+              $ref: '#/KindExternallyTaggedSimple'
+        - type: object
+          required: ['str']
+          properties:
+            str:
+              $ref: '#/StrTypeEnum'
+        - type: object
+          required: ['strplain']
+          properties:
+            strplain:
+              type: string
+        - type: object
+          required: ['nested']
+          properties:
+            nested:
+              $ref: '#/NestedEnum'
+
+StrTypeEnum:
+  type: string
+  enum:
+    - test1
+    - test2
+    - test3
+
+NestedEnum:
+  oneOf:
+    - type: object
+      required: ['kind', 'nameB']
+      properties:
+        kind:
+          const: SIMPLE
+        nameB:
+          type: string
+    - type: object
+      required: ['kind', 'nameB']
+      properties:
+        kind:
+          const: COMPLEX
+        nameB:
+          type: string
+
 KindDiscriminatorSimple:
   type: object
   required: ['name','testField']

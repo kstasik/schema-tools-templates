@@ -57,7 +57,7 @@ impl {{ m::model_name(name = model.object.name) }} { {# if sort required first #
 {{ e::model_object_impl(model = model, options = options) }}
 
 {%- elif model.enum %}
-#[derive({%- if model.enum.type == "number" %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone)]
+#[derive({%- if model.enum.type == "number" %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone{% if not options.skipValidate %}, Validate{% endif %})]
 {%- if model.enum.type == "number" %}
 #[repr(u32)]
 {%- endif %}
@@ -128,7 +128,7 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {{ option.x._discriminator.property | pascalcase }}(
         {%- if option.x._discriminator.value.model -%}
         {{- m::enum_validation(option = option, options = options) }}
-        {{ option.x._discriminator.value.model }}
+        {{ option.x._discriminator.value.model.name }}{% if option.x._discriminator.value.model.kind == 'string' %}Variant{% endif %}
         {%- elif option.x._discriminator.value.simple -%}
         {{- m::enum_validation(option = option, options = options) }}
         {{ m::type(property = option.x._discriminator.value.simple) }}
@@ -142,8 +142,8 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
 #[serde(tag = "{{ model.wrapper.strategy.internally }}")]
 pub enum {{ m::model_name(name = model.wrapper.name) }} {
     {% for option in model.wrapper.models -%}
-    #[serde(rename = "{{ option.x._discriminator.value.model }}")]
-    {{ option.x._discriminator.value.model | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({{- m::enum_validation(option = option, options = options) }}{{ m::type(property = option) }}){% endif %},
+    #[serde(rename = "{{ option.x._discriminator.value.model.name }}")]
+    {{ option.x._discriminator.value.model.name | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({{- m::enum_validation(option = option, options = options) }}{{ m::type(property = option) }}){% endif %},
     {% endfor %}
 }
 
