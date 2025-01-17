@@ -2,7 +2,7 @@
 {% extends "models.j2" %}
 {% block use %}
 use amq_protocol_types::{AMQPValue, LongString, ShortString};
-{% if formats is not containing("date-time") %}
+{% if formats is not containing("date-time") or formats is containing("date") %}
 use chrono::{DateTime, Utc};
 {% endif %}
 use lapin::types::FieldTable;
