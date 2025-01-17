@@ -8,7 +8,7 @@ use reqwest::header::{HeaderName, HeaderValue};
 use super::{ClientError, ApiError, ResponseProcessingError};
 use std::future::Future;
 use std::pin::Pin;
-{% if formats is containing("date-time") -%}
+{% if formats is containing("date-time") or formats is containing("date") -%}
     use chrono::{DateTime, Utc};
 {% endif %}
 

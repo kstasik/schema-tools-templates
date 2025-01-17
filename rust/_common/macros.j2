@@ -140,7 +140,7 @@
 {% elif property.type == "string" %}
     {% if property.validation and property.validation.format and property.validation.format == "uuid" %}
     uuid::Uuid
-    {% elif property.validation and property.validation.format and property.validation.format == "date-time" %}
+    {% elif property.validation and property.validation.format and property.validation.format in ["date-time", "date"] %}
     DateTime<Utc>
     {% else %}
     String

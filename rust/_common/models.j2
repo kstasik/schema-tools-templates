@@ -12,7 +12,7 @@ use once_cell::sync::Lazy;{% endif %}
 {% if formats is containing("decimal") %}
 use rust_decimal::Decimal;
 {% endif %}
-{% if formats is containing("date-time") %}
+{% if formats is containing("date-time") or formats is containing("date") %}
 use chrono::{DateTime, Utc};
 {% endif %}
 
