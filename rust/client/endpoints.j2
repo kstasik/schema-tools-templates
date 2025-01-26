@@ -61,7 +61,7 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 				},
 				{% else %}
 					{% if not response.models %}
-					Some(Self::Error{{ response.statusCode }}),
+					Ok(Self::Error{{ response.statusCode }}()),
 					{% else %}
 					{% if response.models.default.contentType == "text/plain" and response.models.default.model.type == "string" %}
 					response.text()
