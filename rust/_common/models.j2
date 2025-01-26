@@ -1,5 +1,6 @@
 {% import "macros.j2" as m -%}
 {% import "extensions.j2" as e -%}
+{% set_global emptyVariantName = options.emptyVariantName | default(value = "EmptyVariant") %}
 {# if wrappers include #}
 {{ m::do_not_modify() }}
 use serde::{Serialize, Deserialize, Deserializer};
@@ -63,7 +64,10 @@ impl {{ m::model_name(name = model.object.name) }} { {# if sort required first #
 {%- endif %}
 pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {% for option in model.enum.options -%}
-    {% if option == option | when_numeric(prefix="n") | pascalcase -%}
+    {%- if option == "" -%}
+    #[serde(rename = "")]
+    {{ emptyVariantName }},
+    {%- elif option == option | when_numeric(prefix="n") | pascalcase -%}
     {{ option }},
     {%- elif model.enum.type == "number" %}
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }} = {{ option }},
@@ -82,7 +86,9 @@ impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Varian
     fn to_string(&self) -> String {
         match self {
             {%- for option in model.enum.options %}
-            Self::{%- if option == option | when_numeric(prefix="n") | pascalcase -%}
+            Self::{%- if option == "" -%}
+                {{ emptyVariantName }}
+            {%- elif option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
             {%- elif model.enum.type == "number" -%}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
@@ -103,7 +109,9 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             {%- for option in model.enum.options %}
-            "{{ option }}" => Ok(Self::{%- if option == option | when_numeric(prefix="n") | pascalcase -%}
+            "{{ option }}" => Ok(Self::{%- if option == "" -%}
+                {{ emptyVariantName }}
+            {%- elif option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
             {%- elif model.enum.type == "number" -%}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
