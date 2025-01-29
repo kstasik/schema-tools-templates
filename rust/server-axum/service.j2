@@ -76,10 +76,10 @@ impl<S> {{ tag.tag | pascalcase }}Router<S> where S: Clone + Send + Sync + 'stat
     /// ```
     pub fn {{ endpoint.operation | snakecase }}<H, T>(mut self, handler: H) -> Self
         where
-            H: {% if strict_router %}{{ endpoint.operation | pascalcase }}Handler<T, S>{% else %}Handler<T, S> + Clone + Send + Sync + 'static{% endif %},
+            H: {% if strict_router %}{{ endpoint.operation | pascalcase }}Handler<T, S> + Sync{% else %}Handler<T, S> + Clone + Send + Sync + 'static{% endif %},
             T: 'static
     {
-        self.router = self.router.route("{{ endpoint.path | replace(from="{", to=":") | replace(from="}", to="") }}", {% if strict_router -%}on_service(MethodFilter::{{ endpoint.method | upper }}, {{ endpoint.operation | pascalcase }}Service::new{%- else -%}{{ endpoint.method | lower }}{%- endif -%}(handler){% if strict_router %}){% endif %});
+        self.router = self.router.route("{{ endpoint.path }}", {% if strict_router -%}on_service(MethodFilter::{{ endpoint.method | upper }}, {{ endpoint.operation | pascalcase }}Service::new{%- else -%}{{ endpoint.method | lower }}{%- endif -%}(handler){% if strict_router %}){% endif %});
         self
     }
     {%- endfor %}

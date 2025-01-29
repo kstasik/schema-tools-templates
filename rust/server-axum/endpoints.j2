@@ -2,7 +2,6 @@
 {%- import "macros.j2" as m -%}
 {%- import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
-use async_trait::async_trait;
 use axum::{body::Body, http::{HeaderValue, Response, StatusCode}, response::IntoResponse, Json, http};
 use garde::Validate;
 use serde::{

@@ -4,7 +4,6 @@
 {{ m::do_not_modify() }}
 use std::{pin::Pin, sync::Arc};
 
-use async_trait::async_trait;
 use axum::{
     extract::{rejection::QueryRejection, FromRequest, Request},
     http,
@@ -20,7 +19,6 @@ use axum::http::request::Parts;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Query<T>(pub T);
 
-#[async_trait]
 impl<T, S> FromRequestParts<S> for Query<T>
     where
         T: DeserializeOwned,
