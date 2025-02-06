@@ -36,7 +36,7 @@ pub struct {{ endpoint.operation | pascalcase }}Path{
 	{%- for param in endpoint.parameters.path %}
     {{- m::model_validation(model = param.model, options = options, regex_path="super::model::") }}
 	#[serde(rename = "{{ param.name }}"{% if property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
-	pub {{ m::property_name(name = param.name) }}: {{ m::type(property = param.model) }},
+	pub {{ m::property_name(name = param.name) }}: {{ m::type(property = param.model, ns = "super::model") }},
 	{% endfor %}
 }
 {% endif -%}
