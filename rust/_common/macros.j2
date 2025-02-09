@@ -126,7 +126,7 @@
             #[garde(skip)]
         {%- endif %}
     {%- endif %}
-{% endfilter %}{% endmacro model_validation %}
+{% endfilter %}{% endmacro enum_validation %}
 
 {% macro type(property, ns="") %}{% filter nospaces %}
 {% if property.nullable %}Option<{% endif %}
@@ -239,9 +239,11 @@
 {% endfilter %}{% endmacro model_to_string %}
 
 {% macro need_nested_validation(property) %}{% filter nospaces %}
-    {% if property.model and property.model.type == "array" and property.model.model %}
-        {{ self::need_nested_validation(property = property.model.model) }}
-    {% elif property.type == "map" and property.model.type == "any" %}
+    {% if property.type == "array" and property.model %}
+        {{ self::need_nested_validation(property = property.model) }}
+    {% elif property.type == "map" and property.model.type in [
+        "string", "number", "integer", "boolean", "bool", "null", "enum", "any"
+    ] %}
         0
     {% elif property.type != "enum" and not property.x.type and property.model and property.model.type not in [
         "string", "number", "integer", "boolean", "bool", "null", "enum"] %}
