@@ -105,7 +105,7 @@ pub mod manager {
                                         )
                                             .as_str(),
                                         lapin::options::BasicConsumeOptions::default(),
-                                        amq_protocol_types::FieldTable::default(),
+                                        lapin::types::FieldTable::default(),
                                     )
                                     .await
                             }
@@ -425,21 +425,21 @@ pub mod producer {
     }
 
     {% if "tracing" in apm %}
-    fn add_trace_headers(headers: &mut amq_protocol_types::FieldTable, span: &Span) {
+    fn add_trace_headers(headers: &mut lapin::types::FieldTable, span: &Span) {
         let mut trace_headers = std::collections::HashMap::new();
         TraceContextPropagator::new().inject_context(&span.context(), &mut trace_headers);
 
         if let Some(value) = trace_headers.get("traceparent") {
             headers.insert(
-                amq_protocol_types::ShortString::from("traceparent"),
-                amq_protocol_types::AMQPValue::from(amq_protocol_types::LongString::from(value.as_str())),
+                lapin::types::ShortString::from("traceparent"),
+                lapin::types::AMQPValue::from(lapin::types::LongString::from(value.as_str())),
             );
         }
 
         if let Some(value) = trace_headers.get("tracestate") {
             headers.insert(
-                amq_protocol_types::ShortString::from("tracestate"),
-                amq_protocol_types::AMQPValue::from(amq_protocol_types::LongString::from(value.as_str())),
+                lapin::types::ShortString::from("tracestate"),
+                lapin::types::AMQPValue::from(lapin::types::LongString::from(value.as_str())),
             );
         }
     }
@@ -451,7 +451,7 @@ pub mod consumer {
     use std::pin::Pin;
 
     use actix::*;
-    use amq_protocol_types::ShortUInt;
+    use lapin::types::ShortUInt;
     use backoff::backoff::Backoff;
     use backoff::ExponentialBackoff;
     use futures::Future;
@@ -742,13 +742,13 @@ pub mod consumer {
                             continue;
                         }
 
-                        headers.insert(amq_protocol_types::ShortString::from(lower_k), v.clone());
+                        headers.insert(lapin::types::ShortString::from(lower_k), v.clone());
                     }
 
                     let msg_type = Some(&headers)
                         .and_then(|ft| ft.inner().get_key_value("type"))
                         .and_then(|(_, value)| match value {
-                            amq_protocol_types::AMQPValue::LongString(val) => Some(val),
+                            lapin::types::AMQPValue::LongString(val) => Some(val),
                             _ => None,
                         });
 
