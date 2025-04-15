@@ -844,8 +844,8 @@ mod tests {
         let location = model::Location {
             location_id: "test".to_string(),
             simple_mixed: Some(model::LocationSimpleMixedVariant::String("test".to_string())),
-            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Simple(model::KindDiscriminatorSimpleVariant {
-                name: "test".to_string(),
+            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::TwComplex2(model::KindDiscriminatorTwiceComplexVariant {
+                test_1: None,
             })),
             kind_externally_tagged: Some(model::LocationKindExternallyTaggedVariant::Complex(
                 model::LocationKindExternallyTaggedComplex{
@@ -873,8 +873,7 @@ mod tests {
 
         let expected: serde_json::Value = serde_json::json!({
             "kindDiscriminator": {
-              "name": "test",
-              "testField": "simple"
+              "testField": "twComplex2"
             },
             "kindExternallyTagged": {
               "complex": {

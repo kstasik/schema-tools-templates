@@ -32,12 +32,18 @@ Location:
         - $ref: '#/KindDiscriminatorSimple'
         - $ref: '#/KindDiscriminatorComplex'
         - $ref: '#/KindDiscriminatorSemi'
+        - $ref: '#/KindDiscriminatorTwice'
+        - $ref: '#/KindDiscriminatorTwiceComplex'
       discriminator:
         propertyName: testField
         mapping:
           simple: '#/KindDiscriminatorSimple'
           complex: '#/KindDiscriminatorComplex'
           semi: '#/KindDiscriminatorSemi'
+          tw1: '#/KindDiscriminatorTwice'
+          tw2: '#/KindDiscriminatorTwice'
+          twComplex1: '#/KindDiscriminatorTwiceComplex'
+          twComplex2: '#/KindDiscriminatorTwiceComplex'
 
     # externally tagged autodetection
     kindExternallyTagged:
@@ -165,6 +171,22 @@ KindDiscriminatorSemi:
   properties:
     testField:
       type: string
+
+KindDiscriminatorTwice:
+  type: object
+  required: ['testField']
+  properties:
+    testField:
+      type: string
+
+KindDiscriminatorTwiceComplex:
+  type: object
+  required: ['testField']
+  properties:
+    testField:
+      type: string
+    test1:
+      type: number
 
 KindExternallyTaggedSimple:
   type: object
