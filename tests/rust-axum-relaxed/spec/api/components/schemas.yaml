@@ -2,7 +2,7 @@ ServiceStatus:
   type: object
   required:
     - status
-    - components 
+    - components
   properties:
     status:
       $ref: '#/Status'
