@@ -241,7 +241,7 @@
 {% macro need_nested_validation(property) %}{% filter nospaces %}
     {% if property.model and property.model.type == "array" and property.model.model %}
         {{ self::need_nested_validation(property = property.model.model) }}
-    {% elif property.type == "map" and property.model.type == "any" %}
+    {% elif property.type in ["map", "array"] and property.model.type == "any" %}
         0
     {% elif property.type != "enum" and not property.x.type and property.model and property.model.type not in [
         "string", "number", "integer", "boolean", "bool", "null", "enum"] %}
