@@ -58,7 +58,15 @@
 {{ name | pascalcase | when_numeric(prefix=base) }}
 {% endfilter %}{% endmacro enum_variant %}
 
-{% macro get_validation(validation, regex_path="", form=false) %}{% filter nospaces %}
+
+{% macro range_type_validation(value, type) %}{% filter nospaces %}
+    {% set value_str = value | as_str %}
+    {% if type == "number" and value_str is not containing(".") %}
+        .0
+    {% endif %}
+{% endfilter %}{% endmacro range_type_validation %}
+
+{% macro get_validation(validation, regex_path="", form=false, type="integer") %}{% filter nospaces %}
     {% if validation.format and validation.format in ["decimal", "uuid"] %}
     {% else %}
         {% if validation.minLength %}length(min = {{ validation.minLength }}{% if validation.maxLength %}, max = {{ validation.maxLength }}{% endif %}), {% endif %}
@@ -69,8 +77,8 @@
         {% if validation.pattern %}pattern({{ regex_path }}{{ validation.pattern.name | snakecase | upper }}), {% endif %}
         {% if validation.minimum is defined or validation.maximum is defined %}
         range(
-            {% if validation.minimum is defined %}min = {{ validation.minimum }}{% if validation.maximum is defined %}, {% endif %}{% endif %}
-            {% if validation.maximum is defined %}max = {{ validation.maximum }}{% endif %}
+            {% if validation.minimum is defined %}min = {{ validation.minimum }}{{ self::range_type_validation(value = validation.minimum, type = type) }}{% if validation.maximum is defined %}, {% endif %}{% endif %}
+            {% if validation.maximum is defined %}max = {{ validation.maximum }}{{ self::range_type_validation(value = validation.maximum, type = type) }}{% endif %}
         )
         {% endif %}
         {% if form %}){% endif %}
@@ -80,14 +88,14 @@
 {% macro model_validation(model, options, is_required=true, regex_path="", style="") %}{% filter nospaces %}
     {%- if not options.skipValidate %}
         {%- if model.validation and model.type != 'enum' %}
-            {%- if self::get_validation(validation = model.validation, form = style == "form") | length %}
+            {%- if self::get_validation(validation = model.validation, form = style == "form", type = model.type) | length %}
                 #[garde(
                     {% if not is_required -%}inner({%- endif -%}
-                    {{ self::get_validation(validation = model.validation, regex_path = regex_path, form = style == "form") }}
+                    {{ self::get_validation(validation = model.validation, regex_path = regex_path, form = style == "form", type = model.type) }}
                     {%- if model.type == "array" and model.model.validation and model.model.type != "enum" %}
                         {% if not model.required -%}inner({%- endif -%}
                         {%- if model.nullable -%}inner({%- endif -%}
-                        inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path) }})
+                        inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, type = model.model.type) }})
                         {%- if model.nullable -%}){%- endif %}
                         {%- if not model.required -%}){%- endif %}
                     {% endif %}
@@ -97,12 +105,12 @@
                 #[garde(skip)]
             {%- endif %}
         {%- elif model.type == 'array' and model.model.validation and model.model.type != "enum" %}
-            {%- if self::get_validation(validation = model.model.validation, form = style == "form") | length %}
+            {%- if self::get_validation(validation = model.model.validation, form = style == "form", type = model.model.type) | length %}
                 #[garde(
                     {%- if not is_required -%}inner({%- endif -%}
                     {%- if not model.required -%}inner({%- endif -%}
                     {%- if model.nullable -%}inner({%- endif -%}
-                    inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, form = style == "form") }})
+                    inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, form = style == "form", type = model.model.type) }})
                     {%- if model.nullable -%}){%- endif %}
                     {%- if not model.required -%}){%- endif -%}
                     {%- if not is_required -%}){%- endif -%}
