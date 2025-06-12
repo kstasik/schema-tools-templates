@@ -1,4 +1,4 @@
-{# type=tags,filename=api/endpoint.rs,min_version=0.5.0 #}
+{# type=endpoints,filename=api/endpoint.rs,min_version=0.5.0 #}
 {%- import "macros.j2" as m -%}
 {%- import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
@@ -26,8 +26,7 @@ impl IntoResponse for FailedToDeserializeQuery {
     }
 }
 
-{% for tag in tags -%}
-{%- for endpoint in tag.endpoints -%}
+{%- for endpoint in endpoints -%}
 {% if endpoint.parameters.path | length > 0 -%}
 /// {{ endpoint.method | upper }} {{ endpoint.path }}
 /// path parameters
@@ -218,8 +217,6 @@ impl From<{{ m::type(property = model.model, ns = "super::model") }}> for {{ end
 
 {% endfor %}
 {% endfor %}
-{% endfor %}
-
 
 
 /// all convertable Result are acceptable
@@ -240,10 +237,8 @@ macro_rules! impl_from_result {
     };
 }
 
-{% for tag in tags -%}
-{% for endpoint in tag.endpoints %}
+{% for endpoint in endpoints %}
 impl_from_result!({{ endpoint.operation | pascalcase }}Response);
-{%- endfor %}
 {%- endfor %}
 
 /// custom deserializer for query parameters /users?id=3,4,5
