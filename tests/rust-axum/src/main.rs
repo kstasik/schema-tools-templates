@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use std::{net::SocketAddr, sync::Arc};
 
-
 #[derive(Clone)]
 pub struct Database {}
 
@@ -23,16 +22,18 @@ impl MessageBus {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Coordinates (pub f64, pub f64);
+pub struct Coordinates(pub f64, pub f64);
 
 mod api;
 mod client;
 mod handler {
 
-
-    use axum::extract::State;
-    use uuid::uuid;
+    use axum::{
+        extract::State,
+        http::{HeaderMap, HeaderValue},
+    };
     use garde::Validate;
+    use uuid::uuid;
 
     use crate::{api, AppState};
 
@@ -172,7 +173,6 @@ mod handler {
         })
     }
 
-
     pub async fn location_get_v1(
         _path: api::endpoint::LocationGetV1Path,
         State(state): State<AppState>,
@@ -183,13 +183,12 @@ mod handler {
     }
 
     pub async fn locations_create_v1(
-        request: api::model::Location
+        request: api::model::Location,
     ) -> api::endpoint::LocationCreateV1Response {
         api::endpoint::LocationCreateV1Response::Status200(
-            api::model::CreateLocation200Response::new(request)
+            api::model::CreateLocation200Response::new(request),
         )
     }
-
 
     pub async fn devices_create_v1(
         request: api::model::Device,
@@ -199,10 +198,10 @@ mod handler {
             return api::endpoint::DeviceCreateV1Response::Status400(
                 api::model::CreateDevice400Response::new(
                     api::model::CreateDevice400ResponseError::new(
-                        api::model::CreateDevice400ResponseErrorCodeVariant::ValidationError
+                        api::model::CreateDevice400ResponseErrorCodeVariant::ValidationError,
                     ),
-                )
-            )
+                ),
+            );
         }
 
         let _result = state.database.get_smth().await;
@@ -212,7 +211,7 @@ mod handler {
             api::endpoint::DeviceCreateV1Response::Status409(
                 api::endpoint::DeviceCreateV1Response409Headers {
                     location: "/v1/devices/654".to_string(),
-                }
+                },
             )
         } else {
             api::endpoint::DeviceCreateV1Response::Status201
@@ -282,9 +281,23 @@ mod handler {
 
     pub async fn accessory_get_log_v1(
         _path: api::endpoint::AccessoryLogListV1Path,
+        headers: HeaderMap,
         State(_state): State<AppState>,
     ) -> api::endpoint::AccessoryLogListV1Response {
-        api::endpoint::AccessoryLogListV1Response::Status200("plain-text-data".to_string())
+        match headers.get("accept") {
+            Some(hv) if hv == HeaderValue::from_static("text/plain") => {
+                api::endpoint::AccessoryLogListV1Response::Status200(
+                    api::endpoint::AccessoryLogListV1MixedResponse200::TextPlain(
+                        "testing-text-plain".to_string(),
+                    ),
+                )
+            }
+            _ => api::endpoint::AccessoryLogListV1Response::Status200(
+                api::endpoint::AccessoryLogListV1MixedResponse200::ApplicationJson(
+                    api::model::GetAccessoryLog200Response::new(),
+                ),
+            ),
+        }
     }
 }
 
@@ -299,7 +312,7 @@ async fn main() {
 #[derive(Clone)]
 struct AppState {
     database: Arc<Database>,
-    messagebus: Arc<MessageBus>
+    messagebus: Arc<MessageBus>,
 }
 
 async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: u16) {
@@ -336,9 +349,7 @@ async fn run_server(database: Arc<Database>, messagebus: Arc<MessageBus>, port: 
         .with_state(state.clone()) // todo: debug state issue
         .layer(Extension(state));
 
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
     axum::serve(listener, app).await.unwrap()
 }
@@ -351,7 +362,7 @@ mod tests {
     };
 
     use crate::client::error::ClientError;
-    use chrono::{Utc, TimeZone};
+    use chrono::{TimeZone, Utc};
     use uuid::uuid;
 
     use super::*;
@@ -471,9 +482,14 @@ mod tests {
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client.accessory_get_v1("1111".to_string(), super::client::devices::endpoint::AccessoryGetV1Headers {
-            secret: "test".to_string(),
-        }).await;
+        let result = client
+            .accessory_get_v1(
+                "1111".to_string(),
+                super::client::devices::endpoint::AccessoryGetV1Headers {
+                    secret: "test".to_string(),
+                },
+            )
+            .await;
 
         assert_eq!(result.is_err(), false);
 
@@ -497,9 +513,14 @@ mod tests {
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new())
             .with_auth_basic_auth("testing");
 
-        let result = client.accessory_get_v1("invalid".to_string(), super::client::devices::endpoint::AccessoryGetV1Headers {
-            secret: "test".to_string(),
-        }).await;
+        let result = client
+            .accessory_get_v1(
+                "invalid".to_string(),
+                super::client::devices::endpoint::AccessoryGetV1Headers {
+                    secret: "test".to_string(),
+                },
+            )
+            .await;
 
         assert_eq!(result.is_err(), true);
 
@@ -553,12 +574,25 @@ mod tests {
         let result = client.accessory_log_list_v1("missing".to_string()).await;
         assert_eq!(false, result.is_err());
 
+        let _data = result.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_accessory_list_v1_log_text_plain() {
+        let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
+            .await
+            .expect("Cannot run server");
+
+        let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
+
+        let result = client
+            .accessory_log_list_v1_text_plain("missing".to_string())
+            .await;
+        assert_eq!(false, result.is_err());
+
         let data = result.unwrap();
 
-        assert_eq!(
-            "plain-text-data".to_string(),
-            data.response.text().await.unwrap()
-        );
+        assert_eq!("testing-text-plain".to_string(), data);
     }
 
     #[tokio::test]
@@ -588,15 +622,18 @@ mod tests {
 
         let error = result.unwrap_err();
 
-        assert!(matches!(error, ClientError::Error(
-            super::client::devices::endpoint::DeviceCreateV1Error::Error409(_),
-        )));
+        assert!(matches!(
+            error,
+            ClientError::Error(super::client::devices::endpoint::DeviceCreateV1Error::Error409(_),)
+        ));
 
-        if let ClientError::Error(super::client::devices::endpoint::DeviceCreateV1Error::Error409(headers)) = error {
+        if let ClientError::Error(
+            super::client::devices::endpoint::DeviceCreateV1Error::Error409(headers),
+        ) = error
+        {
             let expected = reqwest::header::HeaderValue::from_static("/v1/devices/654");
             assert_eq!(headers.get("location"), Some(&expected));
         }
-
 
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("location", "/v1/devices/654".parse().unwrap());
@@ -629,9 +666,10 @@ mod tests {
 
         let error = result.unwrap_err();
 
-        assert!(matches!(error, ClientError::Error(
-            super::client::devices::endpoint::DeviceCreateV1Error::Error400(_),
-        )));
+        assert!(matches!(
+            error,
+            ClientError::Error(super::client::devices::endpoint::DeviceCreateV1Error::Error400(_),)
+        ));
     }
 
     #[tokio::test]
@@ -705,7 +743,10 @@ mod tests {
         let result = client.device_get_v1("existing".to_string()).await;
         let device = result.unwrap();
 
-        assert!(matches!(device.data.device_class_type, client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10));
+        assert!(matches!(
+            device.data.device_class_type,
+            client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10
+        ));
 
         let serialized = serde_json::to_string(&device.data.device_class_type).unwrap();
         assert_eq!("10", serialized);
@@ -800,7 +841,6 @@ mod tests {
         assert_eq!(data.response.status().as_u16(), 201);
     }
 
-
     #[tokio::test]
     async fn test_reqwest_client() {
         let uri = run_server(Arc::new(Database {}), Arc::new(MessageBus {}))
@@ -843,70 +883,82 @@ mod tests {
 
         let location = model::Location {
             location_id: "test".to_string(),
-            simple_mixed: Some(model::LocationSimpleMixedVariant::String("test".to_string())),
-            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Simple(model::KindDiscriminatorSimpleVariant {
-                name: "test".to_string(),
-            })),
+            simple_mixed: Some(model::LocationSimpleMixedVariant::String(
+                "test".to_string(),
+            )),
+            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Simple(
+                model::KindDiscriminatorSimpleVariant {
+                    name: "test".to_string(),
+                },
+            )),
             kind_externally_tagged: Some(model::LocationKindExternallyTaggedVariant::Complex(
-                model::LocationKindExternallyTaggedComplex{
+                model::LocationKindExternallyTaggedComplex {
                     name_b: "xxx".to_string(),
-                }
+                },
             )),
-            kind_internally_tagged: Some(model::LocationKindInternallyTaggedVariant::Complex(model::KindInternallyTaggedComplexVariant {
-                name_b: "oooo".to_string(),
-            })),
-            kind_internally_tagged_inline: Some(model::LocationKindInternallyTaggedInlineVariant::Simple(
-                model::LocationKindInternallyTaggedInlineOption1Variant {
-                    name_b: "xxxx".to_string(),
-                }
+            kind_internally_tagged: Some(model::LocationKindInternallyTaggedVariant::Complex(
+                model::KindInternallyTaggedComplexVariant {
+                    name_b: "oooo".to_string(),
+                },
             )),
-            un_tagged: Some(model::LocationUnTaggedVariant::KindUntaggedComplexVariant(model::KindUntaggedComplexVariant {
-                name_b: "test".to_string(),
-            })),
-            un_tagged_mixed: Some(model::LocationUnTaggedMixedVariant::String("test".to_string())),
-            kind_externally_tagged_with_str_enum: Some(model::LocationKindExternallyTaggedWithStrEnumVariant::Str(
-                model::LocationKindExternallyTaggedWithStrEnumOption2StrVariant::Test1
-            ))
+            kind_internally_tagged_inline: Some(
+                model::LocationKindInternallyTaggedInlineVariant::Simple(
+                    model::LocationKindInternallyTaggedInlineOption1Variant {
+                        name_b: "xxxx".to_string(),
+                    },
+                ),
+            ),
+            un_tagged: Some(model::LocationUnTaggedVariant::KindUntaggedComplexVariant(
+                model::KindUntaggedComplexVariant {
+                    name_b: "test".to_string(),
+                },
+            )),
+            un_tagged_mixed: Some(model::LocationUnTaggedMixedVariant::String(
+                "test".to_string(),
+            )),
+            kind_externally_tagged_with_str_enum: Some(
+                model::LocationKindExternallyTaggedWithStrEnumVariant::Str(
+                    model::LocationKindExternallyTaggedWithStrEnumOption2StrVariant::Test1,
+                ),
+            ),
         };
 
         let original = serde_json::to_value(location.clone()).unwrap();
 
         let expected: serde_json::Value = serde_json::json!({
-            "kindDiscriminator": {
-              "name": "test",
-              "testField": "simple"
-            },
-            "kindExternallyTagged": {
-              "complex": {
-                "nameB": "xxx"
-              }
-            },
-            "kindInternallyTagged": {
-              "kind": "COMPLEX",
-              "nameB": "oooo"
-            },
-            "kindInternallyTaggedInline": {
-              "kind": "SIMPLE",
-              "nameB": "xxxx"
-            },
-            "locationId": "test",
-            "simpleMixed": "test",
-            "unTagged": {
-              "nameB": "test"
-            },
-            "unTaggedMixed": "test",
-            "kindExternallyTaggedWithStrEnum": {
-                "str": "test1"
+          "kindDiscriminator": {
+            "name": "test",
+            "testField": "simple"
+          },
+          "kindExternallyTagged": {
+            "complex": {
+              "nameB": "xxx"
             }
-          });
+          },
+          "kindInternallyTagged": {
+            "kind": "COMPLEX",
+            "nameB": "oooo"
+          },
+          "kindInternallyTaggedInline": {
+            "kind": "SIMPLE",
+            "nameB": "xxxx"
+          },
+          "locationId": "test",
+          "simpleMixed": "test",
+          "unTagged": {
+            "nameB": "test"
+          },
+          "unTaggedMixed": "test",
+          "kindExternallyTaggedWithStrEnum": {
+              "str": "test1"
+          }
+        });
 
         // println!("original: {}", serde_json::to_string(&original).unwrap());
 
         assert_eq!(original, expected);
 
-        let result = client.location_create_v1(
-            location,
-        ).await;
+        let result = client.location_create_v1(location).await;
 
         assert_eq!(result.is_err(), false);
 
@@ -916,5 +968,4 @@ mod tests {
 
         assert_eq!(original, expected);
     }
-
 }

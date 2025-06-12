@@ -9,6 +9,8 @@ tags:
     description: Device related endpoints
   - name: accessories
     description: Accessories related endpoints
+  - name: unknown
+    description: Additional tag for testing
 security:
   - basicAuth: []
 components:
@@ -90,6 +92,8 @@ components:
       $ref: components/accessories/responses.yaml#/getAccessory200
     getAccessoryLog200:
       $ref: components/accessories/responses.yaml#/getAccessoryLog200
+    getAccessoryLog400:
+      $ref: components/accessories/responses.yaml#/getAccessoryLog400
     getAccessory400:
       $ref: components/accessories/responses.yaml#/getAccessory400
     createAccessory200:
@@ -277,13 +281,14 @@ paths:
     get:
       tags:
         - accessories
+        - unknown # additional tag
       description: Get acessory log
       operationId: getAccessoryLog
       responses:
         200:
           $ref: '#/components/responses/getAccessoryLog200'
         400:
-          $ref: '#/components/responses/getAccessory400'
+          $ref: '#/components/responses/getAccessoryLog400'
         403:
           $ref: '#/components/responses/forbidden403'
         500:

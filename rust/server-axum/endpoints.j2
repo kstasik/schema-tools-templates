@@ -1,4 +1,4 @@
-{# type=tags,filename=api/endpoint.rs,min_version=0.5.0 #}
+{# type=endpoints,filename=api/endpoint.rs,min_version=0.5.0 #}
 {%- import "macros.j2" as m -%}
 {%- import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
@@ -26,8 +26,7 @@ impl IntoResponse for FailedToDeserializeQuery {
     }
 }
 
-{% for tag in tags -%}
-{%- for endpoint in tag.endpoints -%}
+{%- for endpoint in endpoints -%}
 {% if endpoint.parameters.path | length > 0 -%}
 /// {{ endpoint.method | upper }} {{ endpoint.path }}
 /// path parameters
@@ -131,11 +130,28 @@ pub enum {{ endpoint.operation | pascalcase }}Response {
     {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
     {%- if not response.models -%}
     Status{{ response.statusCode }}{% if filtered_response_headers | length > 0 %}({{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers){% endif %},
+    {%- elif response.models.multipleContentTypes %}
+    Status{{ response.statusCode }}({{ endpoint.operation | pascalcase }}MixedResponse{{ response.statusCode }}),
     {%- else -%}
 	Status{{ response.statusCode }}({% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}),
     {%- endif -%}
 	{% endfor %}
 }
+
+{% for response in endpoint.responses.all -%}
+{% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
+{% if response.models.multipleContentTypes %}
+pub enum {{ endpoint.operation | pascalcase }}MixedResponse{{ response.statusCode }} {
+    {% for option in response.models.all -%}
+    {%- if option.contentType == "text/plain" or option.contentType == "text/html" -%}
+    {{ option.contentType | pascalcase }}(String),
+    {%- else -%}
+    {{ option.contentType | pascalcase }}({% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}),
+	{%- endif -%}
+    {% endfor %}
+}
+{% endif %}
+{% endfor %}
 
 impl IntoResponse for {{ endpoint.operation | pascalcase }}Response {
     fn into_response(self) -> axum::response::Response {
@@ -150,6 +166,31 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
                 {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
 				{{ endpoint.operation | pascalcase }}Response::Status{{ response.statusCode }}
                 {%- if response.models -%}
+                {% if response.models.multipleContentTypes | default(value=false) %}
+                    (content_type) => {
+                        match content_type {
+                            {% for option in response.models.all -%}
+                            {%- if option.contentType == "text/plain" or option.contentType == "text/html" -%}
+                            {{ endpoint.operation | pascalcase }}MixedResponse{{ response.statusCode }}::{{ option.contentType | pascalcase }}(data) => {
+                                let mut response = data.into_response();
+                                *response.status_mut() = StatusCode::from_u16({{ response.statusCode }}).unwrap();
+                                response.headers_mut().insert(http::header::CONTENT_TYPE, HeaderValue::from_static("{{ option.contentType }}"));
+                            
+                                response
+                            },
+                            {%- else -%}
+                            {{ endpoint.operation | pascalcase }}MixedResponse{{ response.statusCode }}::{{ option.contentType | pascalcase }}({% if filtered_response_headers | length > 0 %}headers, {% endif %}data) => {
+                                let mut response = Json(data).into_response();
+                                *response.status_mut() = StatusCode::from_u16({{ response.statusCode }}).unwrap();
+                                response.headers_mut().insert(http::header::CONTENT_TYPE, HeaderValue::from_static("{{ option.contentType }}"));
+
+                                response
+                            }
+                            {%- endif -%}
+                            {% endfor %}
+                        }
+                    }
+                {% else %}
                     (model) =>
                     {% if filtered_response_headers | length > 0 %}
                     {
@@ -173,7 +214,7 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
                     {% else %}
                     {{ e::into_response(response = response, name = "model") }}
                     {% endif %}
-
+                {% endif %}
                 {%- elif filtered_response_headers | length > 0 %}(h) => {
                     let mut response = StatusCode::from_u16({{ response.statusCode }}).unwrap().into_response();
                     let headers = response.headers_mut();
@@ -208,7 +249,11 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
 impl From<{{ m::type(property = model.model, ns = "super::model") }}> for {{ endpoint.operation | pascalcase }}Response {
     fn from(data: {{ m::type(property = model.model, ns = "super::model") }}) -> Self {
         Self::Status{{ response.statusCode }}(
+            {%- if response.models.multipleContentTypes | default(value=false) -%}
+            {{ endpoint.operation | pascalcase }}MixedResponse{{ response.statusCode }}::ApplicationJson(data)
+            {%- else -%}
             data
+            {%- endif -%}
         )
     }
 
@@ -218,8 +263,6 @@ impl From<{{ m::type(property = model.model, ns = "super::model") }}> for {{ end
 
 {% endfor %}
 {% endfor %}
-{% endfor %}
-
 
 
 /// all convertable Result are acceptable
@@ -240,10 +283,8 @@ macro_rules! impl_from_result {
     };
 }
 
-{% for tag in tags -%}
-{% for endpoint in tag.endpoints %}
+{% for endpoint in endpoints %}
 impl_from_result!({{ endpoint.operation | pascalcase }}Response);
-{%- endfor %}
 {%- endfor %}
 
 /// custom deserializer for query parameters /users?id=3,4,5

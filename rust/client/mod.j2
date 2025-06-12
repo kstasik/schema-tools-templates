@@ -66,7 +66,7 @@ impl {{ options.name }} {
     {% set success_headers = endpoint.responses.success.headers | default(value = []) | filter_not_inarray(attribute="name", values=skipped_headers) %}
 
     #[allow(dead_code)]
-    pub async fn {{ endpoint.operation | snakecase }}{% if success.vnd %}_{{ success.vnd | snakecase }}{% endif %}(
+    pub async fn {{ endpoint.operation | snakecase }}{% if success.alternativeContentType %}_{{ success.contentType | snakecase }}{% elif success %}{% endif %}(
         &self, {{ e::endpoint_parameters(endpoint=endpoint, options=options) }}
         {%- for p in endpoint.parameters.path %} {{ m::property_name(name = p.name) }}: {{ m::type(property = p.model, ns = "model") }},{% endfor -%}
         {%- if endpoint.requestbody.models.default %} body: {{ m::type(property = endpoint.requestbody.models.default.model, ns = "model" ) }}, {% endif -%}
@@ -186,7 +186,12 @@ impl {{ options.name }} {
                 .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
                 {% if success_headers | length > 0 %}.map(|d| (d, headers)){% endif %}
             {% else %}
-                {% if not success.model or not success.model.model or not success.model.model.name or not success.model.model.type %}
+                {% if success.contentType and (success.contentType == "text/html" or success.contentType == "text/plain" or success.contentType == "application/octet-stream") %}
+                    return response
+                        .text()
+                        .await
+                        .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
+                {% elif not success.model or not success.model.model or not success.model.model.name or not success.model.model.type %}
                     return Ok({{ m::endpoint_default_response(endpoint = endpoint, options = options) }}::from_response(response))
                 {% else %}
                     return response

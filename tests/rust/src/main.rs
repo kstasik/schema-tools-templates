@@ -404,7 +404,7 @@ mod tests {
 
         let data = result.unwrap();
 
-        assert_eq!("plain-text-data".to_string(), data.response.text().await.unwrap());
+        assert_eq!("plain-text-data".to_string(), data);
     }
 
     #[actix_web::test]
