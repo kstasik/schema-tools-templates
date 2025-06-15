@@ -197,6 +197,8 @@
             {{ self::endpoint_model_response(success = success, headers = headers) }}
         {% elif success.model and success.model.type == "wrapper" and success.model.model and success.model.model.type %}
             {{ self::endpoint_model_response(success = success, headers = headers) }}
+        {% elif success.contentType and (success.contentType == "text/html" or (success.model and success.model.type == "string")) %}
+            String
         {% else %}
             {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
         {% endif %}

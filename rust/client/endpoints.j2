@@ -1,4 +1,4 @@
-{# type=tags,filename=%options.namespace%/endpoint.rs,min_version=0.2.0 #}
+{# type=endpoints,filename=%options.namespace%/endpoint.rs,min_version=0.2.0 #}
 {%- import "macros.j2" as m -%}
 {% import "extra.j2" as e -%}
 {{ m::do_not_modify() }}
@@ -13,10 +13,10 @@ use std::pin::Pin;
 {% endif %}
 
 
-{% for tag in tags %}
-{% set allowed_operations = e::allowed_operations(endpoints=tag.endpoints, options=options) | split(pat=" ") %}
-{% set filtered_endpoints = tag.endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
+{% set allowed_operations = e::allowed_operations(endpoints=endpoints, options=options) | split(pat=" ") %}
+{% set filtered_endpoints = endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
 {% for endpoint in filtered_endpoints %}
+
 {% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
 {% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 //
@@ -61,7 +61,7 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 				},
 				{% else %}
 					{% if not response.models %}
-					Some(Self::Error{{ response.statusCode }}),
+					Ok(Self::Error{{ response.statusCode }}()),
 					{% else %}
 					{% if response.models.default.contentType == "text/plain" and response.models.default.model.type == "string" %}
 					response.text()
@@ -130,5 +130,4 @@ pub struct {{ endpoint.operation | pascalcase }}Query{
 	{% endfor -%}
 }
 {% endif %}
-{% endfor %}
 {% endfor %}
