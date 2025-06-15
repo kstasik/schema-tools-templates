@@ -133,6 +133,7 @@ pub enum {{ endpoint.operation | pascalcase }}Response {
     {%- else -%}
 	Status{{ response.statusCode }}({% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}),
     {%- endif -%}
+    {% if response.models.multipleContentTypes | default(value=false) %}/* MULTIPLE! */{% endif %}
 	{% endfor %}
 }
 
