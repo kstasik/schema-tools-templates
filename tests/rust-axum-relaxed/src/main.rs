@@ -552,7 +552,7 @@ mod tests {
 
         assert_eq!(
             "plain-text-data".to_string(),
-            data.response.text().await.unwrap()
+            data
         );
     }
 

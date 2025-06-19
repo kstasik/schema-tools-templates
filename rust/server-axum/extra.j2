@@ -20,37 +20,37 @@ model.into_response()
 {% endif %}
 {%- endmacro into_response %}
 
-{% macro endpoint_parameters(endpoint) -%}
+{% macro endpoint_parameters(endpoint, namespace="super") -%}
 {%- set skipped_headers = self::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") -%}
 {%- set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) -%}
 {%- if endpoint.parameters.path | length > 0 -%}
-super::endpoint::{{ endpoint.operation | pascalcase }}Path,
+{{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}Path,
 {%- endif -%}
 {%- if endpoint.parameters.query | length > 0 -%}
-super::endpoint::{{ endpoint.operation | pascalcase }}Query,
+{{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}Query,
 {%- endif -%}
 {%- if endpoint.requestbody.models.default -%}
-super::model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }},
+{{ namespace }}model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }},
 {%- endif -%}
 {%- if filtered_headers | length > 0 -%}
-super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
+{{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
 {%- endif -%}
 {%- endmacro endpoint_parameters %}
 
-{% macro handler_definition_body(endpoint, options, filtered_headers) -%}
+{% macro handler_definition_body(endpoint, options, filtered_headers, namespace="super::") -%}
 {%- set qs = options.qs | default(value = "serde_urlencoded") -%}
 {%- set extract = options.extract | default(value = "axum::extract") -%}
 {%- set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody.models.default %}
                     {%- if extra %}
                     {%- if endpoint.parameters.path | length > 0 %}
-                    let path = match {{ extract }}::Path::<super::endpoint::{{ endpoint.operation | pascalcase }}Path>::from_request_parts(&mut parts, state).await {
+                    let path = match {{ extract }}::Path::<{{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}Path>::from_request_parts(&mut parts, state).await {
                         Ok(value) => value,
                         Err(err) => return err.into_response(),
                     };
                     {%- endif %}
 
                     {%- if endpoint.parameters.query | length > 0 %}
-                    let query = match {% if qs == "serde_qs" %}super::qs::Query{% else %}{{ extract }}::Query{% endif %}::<super::endpoint::{{ endpoint.operation | pascalcase }}Query>::from_request_parts(&mut parts, state).await {
+                    let query = match {% if qs == "serde_qs" %}{{ namespace }}qs::Query{% else %}{{ extract }}::Query{% endif %}::<{{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}Query>::from_request_parts(&mut parts, state).await {
                         Ok(value) => value,
                         Err(err) => return err.into_response(),
                     };
@@ -59,21 +59,21 @@ super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
 
 {%- endmacro handler_definition_body %}
 
-{% macro handler_definition_body_fr(endpoint, options, filtered_headers) -%}
+{% macro handler_definition_body_fr(endpoint, options, filtered_headers, namespace="super::") -%}
 {%- set qs = options.qs | default(value = "serde_urlencoded") -%}
 {%- set extract = options.extract | default(value = "axum::extract") -%}
 {%- set extra = filtered_headers | length > 0 or endpoint.requestbody.models.default %}
                     {%- if extra %}
                     let req = Request::from_parts(parts, body);
                     {%- if filtered_headers | length > 0 %}
-                    let headers = match super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders::try_from(req.headers()) {
+                    let headers = match {{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders::try_from(req.headers()) {
                         Ok(value) => value,
                         Err(err) => return err.into_response(),
                     };
                     {% endif %}
 
                     {%- if endpoint.requestbody.models.default -%}
-                    let body = match {% if extract == 'axum::extract' %}axum::{% else %}{{ extract }}::{% endif %}Json::<super::model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }}>::from_request(req, state).await {
+                    let body = match {% if extract == 'axum::extract' %}axum::{% else %}{{ extract }}::{% endif %}Json::<{{ namespace }}model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }}>::from_request(req, state).await {
                         Ok(value) => value,
                         Err(err) => return err.into_response(),
                     };

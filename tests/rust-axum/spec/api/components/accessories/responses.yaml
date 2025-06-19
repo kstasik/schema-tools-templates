@@ -136,7 +136,7 @@ createAccessory409:
         $ref: ./schemas.yaml#/CreateAccessoryError
 
 getAccessoryLog200:
-  description: Operation succeeded.
+  description: Operation succeeded, multiple content types.
   headers:
     traceparent:
       schema:
@@ -145,6 +145,23 @@ getAccessoryLog200:
       schema:
         $ref: ../../types.yaml#/TraceState
   content:
+    application/json:
+      schema:
+        type: object 
     text/plain:
       schema:
         type: string
+    text/html:
+      schema:
+        type: string
+
+getAccessoryLog400:
+  description: Empty content error.
+  headers:
+    traceparent:
+      schema:
+        $ref: ../../types.yaml#/TraceParent
+    tracestate:
+      schema:
+        $ref: ../../types.yaml#/TraceState
+  content: {}
