@@ -777,7 +777,7 @@ pub mod consumer {
                         Some(handler) => {
                             let dependency = self.dependency.clone();
 
-                            handler.call(dependency, delivery){% if "tracing" in apm %}.instrument(tracing::info_span!("handler")){% endif %}.into_actor(self).spawn(ctx);
+                            handler.call(dependency, delivery){% if "tracing" in apm %}.instrument(span.clone()){% endif %}.into_actor(self).spawn(ctx);
                         }
                         None => {
                             {% if "tracing" in apm %}span.record("otel.status_code", SPAN_STATUS_ERROR);{% endif %}
@@ -796,7 +796,7 @@ pub mod consumer {
                                     {{ e::log(type = "error", options = options) }}("Cannot ack message: {:?}", err);
                                 }
                             }
-                            {% if "tracing" in apm %}.instrument(tracing::info_span!("handler.missing")){% endif %}
+                            {% if "tracing" in apm %}.instrument(span.clone()){% endif %}
                             .into_actor(self)
                             .spawn(ctx);
                         }
