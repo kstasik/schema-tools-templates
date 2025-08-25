@@ -5,7 +5,7 @@
 use serde::{de::{self, IntoDeserializer}, Deserialize, Serialize};
 use std::fmt;
 use reqwest::header::{HeaderName, HeaderValue};
-use super::{ClientError, ApiError, ResponseProcessingError};
+use super::{ApiError, ApiResponseError, ClientError, ResponseProcessingError};
 use std::future::Future;
 use std::pin::Pin;
 {% if formats is containing("date-time") or formats is containing("date") -%}
@@ -75,7 +75,7 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 				{% endif %}
 				{% endif %}
 				{% endfor %}
-				_ => Err(ResponseProcessingError::NotSupported(response))
+				_ => Err(ResponseProcessingError::NotSupported(ApiResponseError::from_response(response).await))
 			}
 		})
 	}

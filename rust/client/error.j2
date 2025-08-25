@@ -5,13 +5,30 @@
 use std::future::Future;
 use std::pin::Pin;
 
+#[derive(Debug)]
+pub struct ApiResponseError {
+    url: String,
+    status_code: String,
+    response_text: String,
+}
+
+impl ApiResponseError {
+    pub async fn from_response(response: reqwest::Response) -> Self {
+        Self {
+            url: response.url().to_string(),
+            status_code: response.status().to_string(),
+            response_text: response.text().await.unwrap_or_else(|err| err.to_string()),
+        }
+    }
+}
+
 pub trait ApiError {
     fn extract(response: reqwest::Response) -> Pin<Box<dyn Future<Output = Result<Self, ResponseProcessingError>> + Send>> where Self: Sized;
 }
 
 #[derive(Debug)]
 pub enum ResponseProcessingError {
-    NotSupported(reqwest::Response),
+    NotSupported(ApiResponseError),
     Deserialization(reqwest::Error)
 }
 
