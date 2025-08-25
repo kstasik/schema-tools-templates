@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use reqwest::header::{HeaderName, HeaderValue};
-use super::error::{ClientError, ApiError, ResponseProcessingError};
+use super::error::{ApiError, ApiResponseError, ClientError, ResponseProcessingError};
 use std::collections::BTreeMap;
 {% if "tracing" in apm %}
 {% set_global apm_prefix = options.apmPrefix | default(value = "") %}
