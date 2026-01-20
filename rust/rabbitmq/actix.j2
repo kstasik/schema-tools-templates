@@ -444,6 +444,27 @@ pub mod producer {
         }
     }
     {% endif %}
+
+    pub struct Healthcheck {}
+
+    #[derive(Debug)]
+        pub enum HealthcheckError {
+        NoConnection,
+    }
+
+    impl Message for Healthcheck {
+        type Result = Result<lapin::ChannelStatus, HealthcheckError>;
+    }
+
+    impl<'a> Handler<Healthcheck> for Producer {
+        type Result = Result<lapin::ChannelStatus, HealthcheckError>;
+        fn handle(&mut self, _: Healthcheck, _: &mut Context<Self>) -> Self::Result {
+            match self.channel.as_ref() {
+                Some(c) => Ok(c.status().clone()),
+                None => Err(HealthcheckError::NoConnection),
+            }
+        }
+    }
 }
 
 pub mod consumer {
