@@ -3,6 +3,7 @@
 {# if wrappers include #}
 {{ m::do_not_modify() }}
 use serde::{Serialize, Deserialize, Deserializer};
+use std::str::FromStr;
 use std::collections::BTreeMap;
 {% if not options.skipValidate %}use garde::Validate;
 use regex::Regex;
@@ -28,19 +29,20 @@ pub static {{ regexp.name | snakecase | upper }}: Lazy<Regex> = Lazy::new(|| { R
 {%- if model.object %}
 #[derive(Deserialize, Serialize, Debug,{% if not options.skipValidate %} Validate,{% endif %} Clone{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
 pub struct {{ m::model_name(name = model.object.name) }} {
-    {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") -%}
-    {% for property in filtered_properties -%}
-    {{- m::model_validation(model = property, options = options) }}
+    {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") %}
+    {% for property in filtered_properties %}
+    {{ m::model_validation(model = property, options = options) }}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
     pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
     {%- endfor %}
 }
 {# if sort required first #}
 impl {{ m::model_name(name = model.object.name) }} {
-    pub fn new({%- for property in filtered_properties -%}{{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %}, {%- endfor %}) -> Self {
+    pub fn new({%- for property in filtered_properties -%}{{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %}, {% endfor -%}) -> Self {
         Self {
-            {% for property in filtered_properties %}{{ m::property_name(name = property.name) }},
-            {%- endfor %}
+            {% for property in filtered_properties -%}
+            {{ m::property_name(name = property.name) }},
+            {% endfor %}
         }
     }
     {%- for property in model.object.properties | filter(attribute="type", value="const") -%}
@@ -62,27 +64,27 @@ impl {{ m::model_name(name = model.object.name) }} {
 {%- endif %}
 pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {% for option in model.enum.options -%}
-    {% if option == "*" %}
+    {% if option == "*" -%}
     #[serde(rename = "{{ option }}")]
     {%- set a = 'SignStar' %}
     {{ m::enum_variant(name = a, base = m::model_name(name = a) ) }},
     {% elif option == option | when_numeric(prefix="n") | pascalcase -%}
     {{ option }},
-    {%- elif model.enum.type == "number" %}
+    {% elif model.enum.type == "number" -%}
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }} = {{ option }},
-    {%- elif option is matching("^[\d]+") %}
+    {% elif option is matching("^[\d]+") -%}
     #[serde(rename = "{{ option }}")]
-    {% set a = 'Code' ~ option %}
+    {%- set a = 'Code' ~ option %}
     {{ m::enum_variant(name = a, base = m::model_name(name = a)) }},
-    {%- else %}
+    {% else -%}
     #[serde(rename = "{{ option }}")]
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }},
-    {% endif %}
+    {% endif -%}
     {%- endfor %}
 }
 
-impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Variant {
-    fn to_string(&self) -> String {
+impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
+    fn as_ref(&self) -> &str {
         match self {
             {%- for option in model.enum.options %}
             Self::{%- if option == "*" -%}
@@ -99,12 +101,18 @@ impl std::string::ToString for {{ m::model_name(name = model.enum.name) }}Varian
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
             {%- endif %} => "{{ option }}",
             {%- endfor %}
-        }.to_string()
+        }
     }
 }
 
-impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
-    type Err = ();
+impl std::fmt::Display for {{ m::model_name(name = model.enum.name) }}Variant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_ref())
+    }
+}
+
+impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -123,8 +131,16 @@ impl std::str::FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
             {%- endif %}),
             {%- endfor %}
-            _ => Err(())
+            _ => Err(format!("Unknown variant: {}", s))
         }
+    }
+}
+
+impl std::convert::TryFrom<String> for {{ m::model_name(name = model.enum.name) }}Variant {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::from_str(&s)
     }
 }
 
