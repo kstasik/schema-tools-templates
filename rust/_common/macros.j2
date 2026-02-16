@@ -86,9 +86,9 @@
 {% endfilter %}{% endmacro get_validation %}
 
 {% macro model_validation(model, options, is_required=true, regex_path="", style="") %}{% filter nospaces %}
-    {%- if not options.skipValidate %}
-        {%- if model.validation and model.type != 'enum' %}
-            {%- if self::get_validation(validation = model.validation, form = style == "form", type = model.type) | length %}
+    {% if not options.skipValidate %}
+        {% if model.validation and model.type != 'enum' %}
+            {% if self::get_validation(validation = model.validation, form = style == "form", type = model.type) | length %}
                 #[garde(
                     {% if not is_required -%}inner({%- endif -%}
                     {{ self::get_validation(validation = model.validation, regex_path = regex_path, form = style == "form", type = model.type) }}
@@ -101,11 +101,11 @@
                     {% endif %}
                     {%- if not is_required -%}){%- endif %}
                 )]
-            {%- else %}
+            {% else %}
                 #[garde(skip)]
-            {%- endif %}
-        {%- elif model.type == 'array' and model.model.validation and model.model.type != "enum" %}
-            {%- if self::get_validation(validation = model.model.validation, form = style == "form", type = model.model.type) | length %}
+            {% endif %}
+        {% elif model.type == 'array' and model.model.validation and model.model.type != "enum" %}
+            {% if self::get_validation(validation = model.model.validation, form = style == "form", type = model.model.type) | length %}
                 #[garde(
                     {%- if not is_required -%}inner({%- endif -%}
                     {%- if not model.required -%}inner({%- endif -%}
@@ -115,15 +115,15 @@
                     {%- if not model.required -%}){%- endif -%}
                     {%- if not is_required -%}){%- endif -%}
                 )]
-            {%- else %}
+            {% else %}
                 #[garde(skip)]
-            {%- endif %}
-        {%- elif self::need_nested_validation(property=model) == "1" %}
+            {% endif %}
+        {% elif self::need_nested_validation(property=model) == "1" %}
             #[garde(dive)]
-        {%- else %}
+        {% else %}
             #[garde(skip)]
-        {%- endif %}
-    {%- endif %}
+        {% endif %}
+    {% endif %}
 {% endfilter %}{% endmacro model_validation %}
 
 {% macro enum_validation(option, options, regex_path="") %}{% filter nospaces %}
