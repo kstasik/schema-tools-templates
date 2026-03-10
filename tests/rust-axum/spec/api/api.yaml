@@ -29,6 +29,10 @@ components:
       $ref: components/accessories/schemas.yaml#/Accessory
     AccessoryCreateError:
       $ref: components/accessories/schemas.yaml#/CreateAccessoryError
+    EnableList:
+      $ref: components/locations/schemas.yaml#/EnableList
+    DisableList:
+      $ref: components/locations/schemas.yaml#/DisableList
     KindDiscriminatorSimple:
       $ref: components/locations/schemas.yaml#/KindDiscriminatorSimple
     KindDiscriminatorComplex:

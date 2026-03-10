@@ -1,3 +1,21 @@
+EnableList:
+  type: object
+  required: ['enable']
+  properties:
+    enable:
+      type: array
+      items:
+        type: string
+
+DisableList:
+  type: object
+  required: ['disable']
+  properties:
+    disable:
+      type: array
+      items:
+        type: string
+
 Location:
   additionalProperties: false
   type: object
@@ -116,6 +134,12 @@ Location:
           properties:
             nested:
               $ref: '#/NestedEnum'
+
+    # global references
+    members:
+      oneOf:
+        - $ref: '#/EnableList'
+        - $ref: '#/DisableList'
 
 StrTypeEnum:
   type: string
