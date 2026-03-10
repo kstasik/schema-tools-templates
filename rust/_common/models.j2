@@ -139,7 +139,7 @@ impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
 impl std::convert::TryFrom<String> for {{ m::model_name(name = model.enum.name) }}Variant {
     type Error = String;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> Result<Self, String> {
         Self::from_str(&s)
     }
 }

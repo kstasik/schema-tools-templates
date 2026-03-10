@@ -921,6 +921,9 @@ mod tests {
                     model::LocationKindExternallyTaggedWithStrEnumOption2StrVariant::Test1,
                 ),
             ),
+            members: Some(model::LocationMembersVariant::Enable(vec![
+                "test".to_string()
+            ])),
         };
 
         let original = serde_json::to_value(location.clone()).unwrap();
@@ -951,6 +954,9 @@ mod tests {
           "unTaggedMixed": "test",
           "kindExternallyTaggedWithStrEnum": {
               "str": "test1"
+          },
+          "members": {
+              "enable": ["test"]
           }
         });
 
