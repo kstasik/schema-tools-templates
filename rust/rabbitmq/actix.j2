@@ -10,6 +10,7 @@ pub mod manager {
     use backoff::backoff::Backoff;
     use backoff::ExponentialBackoff;
     use lapin::{options::ConfirmSelectOptions, Connection, ConnectionProperties};
+    use lapin::types::ShortString;
 
     pub struct RabbitmqManager {
         uri: String,
@@ -98,12 +99,13 @@ pub mod manager {
 
                                 channel
                                     .basic_consume(
-                                        msg.configuration.queue_name.as_str(),
+                                        msg.configuration.queue_name,
                                         format!(
                                             "rust-actix-consumer {:?}",
                                             std::thread::current().id()
                                         )
-                                            .as_str(),
+                                            .as_str()
+                                            .into(),
                                         lapin::options::BasicConsumeOptions::default(),
                                         lapin::types::FieldTable::default(),
                                     )
@@ -206,6 +208,7 @@ pub mod producer {
     use actix::*;
     use backoff::backoff::Backoff;
     use backoff::ExponentialBackoff;
+    use lapin::types::ShortString;
 
     use super::manager::RabbitmqManager;
 
@@ -228,7 +231,7 @@ pub mod producer {
         manager: Addr<RabbitmqManager>,
         backoff: ExponentialBackoff,
         channel: Option<Arc<lapin::Channel>>,
-        exchange: String,
+        exchange: ShortString,
     }
 
     impl Supervised for Producer {}
@@ -241,7 +244,7 @@ pub mod producer {
             Supervisor::start(|_| Self {
                 backoff,
                 manager,
-                exchange,
+                exchange: ShortString::from(exchange),
                 channel: None,
             })
         }
@@ -365,7 +368,7 @@ pub mod producer {
             let body = serde_json::json!(payload);
 
             let exchange = self.exchange.clone();
-            let routing_key = routing_key.to_owned();
+            let routing_key = ShortString::from(routing_key);
 
             match serde_json::to_vec(&body) {
                 Ok(serialized) => {
@@ -374,8 +377,8 @@ pub mod producer {
                         async move {
                             if let Some(channel) = channel {
                                 match channel.basic_publish(
-                                    &exchange,
-                                    &routing_key,
+                                    exchange,
+                                    routing_key,
                                     lapin::options::BasicPublishOptions::default(),
                                     &serialized,
                                     props,
@@ -477,6 +480,7 @@ pub mod consumer {
     use backoff::ExponentialBackoff;
     use futures::Future;
     use lapin::message::Delivery;
+    use lapin::types::ShortString;
 
     use super::manager::RabbitmqManager;
 
@@ -491,7 +495,7 @@ pub mod consumer {
     #[derive(Clone)]
     pub struct Configuration {
         pub prefetch: ShortUInt,
-        pub queue_name: String,
+        pub queue_name: ShortString,
     }
 
     #[derive(Debug)]
@@ -521,7 +525,7 @@ pub mod consumer {
         pub fn new(queue_name: &str) -> Self {
             Self {
                 prefetch: 10,
-                queue_name: queue_name.to_string(),
+                queue_name: ShortString::from(queue_name),
             }
         }
 
