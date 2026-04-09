@@ -1,0 +1,372 @@
+{# type=static,filename=rabbitmq/consumer.rs,min_version=0.2.0 #}
+use super::{RabbitConnectionManager, message::MessageExtractor, shutdown::Shutdown};
+use futures_util::StreamExt;
+use lapin::{
+    message::Delivery,
+    options::*,
+    types::{AMQPValue, FieldTable},
+};
+use rustc_hash::FxHashMap;
+use std::future::{self, Future};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
+
+const BASIC_ACK: BasicAckOptions = BasicAckOptions { multiple: false };
+const BASIC_NACK: BasicNackOptions = BasicNackOptions {
+    multiple: false,
+    requeue: false,
+};
+const BASIC_REQUEUE: BasicNackOptions = BasicNackOptions {
+    multiple: false,
+    requeue: true,
+};
+enum LoopExit {
+    StreamError,
+    StreamClosed,
+}
+
+struct WorkerChannel {
+    conn: Arc<lapin::Connection>,
+    stream: lapin::Consumer,
+}
+
+#[derive(Debug, Clone)]
+pub enum Confirmation {
+    Ack,
+    Nack,
+    Requeue,
+}
+
+impl From<()> for Confirmation {
+    fn from(_: ()) -> Self {
+        Confirmation::Ack
+    }
+}
+
+impl From<anyhow::Error> for Confirmation {
+    fn from(_: anyhow::Error) -> Self {
+        Confirmation::Requeue
+    }
+}
+
+impl<O, E> From<Result<O, E>> for Confirmation
+where
+    O: Into<Confirmation>,
+    E: Into<Confirmation>,
+{
+    fn from(result: Result<O, E>) -> Self {
+        match result {
+            Ok(o) => o.into(),
+            Err(e) => e.into(),
+        }
+    }
+}
+
+pub struct IncomingMessage<'a> {
+    pub data: &'a [u8],
+    pub headers: &'a FieldTable,
+    pub delivery_tag: u64,
+    pub routing_key: &'a str,
+}
+
+type HandlerMap<D> = FxHashMap<&'static str, Box<dyn Handler<D>>>;
+
+pub trait Handler<Deps>: Send + Sync + 'static {
+    fn call(
+        &self,
+        deps: Deps,
+        message: IncomingMessage<'_>,
+    ) -> Pin<Box<dyn Future<Output = Confirmation> + Send + 'static>>;
+}
+
+pub struct MessageHandler<T, Response, D>
+where
+    T: MessageExtractor,
+    Response: Future + Send,
+    Response::Output: Into<Confirmation>,
+{
+    handler: Box<dyn Fn(T, D) -> Response + Send + Sync>,
+}
+
+impl<T, Response, D> MessageHandler<T, Response, D>
+where
+    T: MessageExtractor,
+    Response: Future + Send,
+    Response::Output: Into<Confirmation>,
+{
+    pub fn new<F: Fn(T, D) -> Response + Send + Sync + 'static>(handler: F) -> Self {
+        Self {
+            handler: Box::new(handler),
+        }
+    }
+}
+
+impl<T, Response, D> Handler<D> for MessageHandler<T, Response, D>
+where
+    T: MessageExtractor + 'static,
+    Response: Future + Send + 'static,
+    Response::Output: Into<Confirmation>,
+    D: 'static,
+{
+    fn call(
+        &self,
+        deps: D,
+        msg: IncomingMessage<'_>,
+    ) -> Pin<Box<dyn Future<Output = Confirmation> + Send + 'static>> {
+        match T::extract_from_message(&msg) {
+            Some(parsed) => {
+                let fut = (self.handler)(parsed, deps);
+                Box::pin(async move { fut.await.into() })
+            }
+            None => Box::pin(future::ready(Confirmation::Nack)),
+        }
+    }
+}
+
+pub struct RabbitConsumer<D: Clone + Send + 'static> {
+    queue: Arc<str>,
+    dependencies: D,
+    handlers: HandlerMap<D>,
+    consumer_prefetch: u16,
+    workers: usize,
+    manager: Arc<RabbitConnectionManager>,
+}
+
+impl<D> RabbitConsumer<D>
+where
+    D: Clone + Send + Sync + 'static,
+{
+    pub fn new(
+        queue: impl Into<Arc<str>>,
+        consumer_prefetch: u16,
+        dependencies: D,
+        workers: Option<usize>,
+        manager: Arc<RabbitConnectionManager>,
+    ) -> Self {
+        Self {
+            queue: queue.into(),
+            dependencies,
+            handlers: FxHashMap::default(),
+            consumer_prefetch,
+            workers: workers.unwrap_or(1),
+            manager,
+        }
+    }
+
+    pub fn subscribe<F, M, Response>(mut self, handler: F) -> Self
+    where
+        F: Fn(M, D) -> Response + Send + Sync + 'static,
+        M: MessageExtractor + 'static,
+        Response: Future + Send + 'static,
+        Response::Output: Into<Confirmation>,
+    {
+        self.handlers
+            .insert(M::message_type(), Box::new(MessageHandler::new(handler)));
+        self
+    }
+
+    pub fn start(self, shutdown: Shutdown) -> tokio::task::JoinHandle<()> {
+        let mut handlers = self.handlers;
+        handlers.shrink_to_fit();
+        let handlers = Arc::new(handlers);
+        let mut worker_handles = Vec::with_capacity(self.workers);
+
+        for i in 0..self.workers {
+            let handle = tokio::spawn(run_worker(
+                i,
+                Arc::clone(&self.queue),
+                self.dependencies.clone(),
+                Arc::clone(&handlers),
+                self.consumer_prefetch,
+                Arc::clone(&self.manager),
+                shutdown.clone(),
+            ));
+            worker_handles.push(handle);
+        }
+
+        tokio::spawn(async move {
+            shutdown.wait().await;
+            futures_util::future::join_all(worker_handles).await;
+        })
+    }
+}
+
+async fn setup_channel(
+    id: usize,
+    queue: &Arc<str>,
+    tag: &str,
+    consumer_prefetch: u16,
+    manager: &Arc<RabbitConnectionManager>,
+    backoff: &mut Duration,
+) -> Option<WorkerChannel> {
+    let conn = match manager.get().await {
+        Ok(c) => {
+            *backoff = Duration::from_millis(500);
+            c
+        }
+        Err(e) => {
+            tracing::error!(worker = id, "Connection error: {e}");
+            tokio::time::sleep(*backoff).await;
+            *backoff = (*backoff * 2).min(Duration::from_secs(30));
+            return None;
+        }
+    };
+
+    let channel = match conn.create_channel().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!(worker = id, "Channel error: {e}");
+            if !conn.status().connected() {
+                manager.invalidate().await;
+            }
+            tokio::time::sleep(*backoff).await;
+            *backoff = (*backoff * 2).min(Duration::from_secs(30));
+            return None;
+        }
+    };
+
+    if let Err(e) = channel
+        .basic_qos(consumer_prefetch, BasicQosOptions::default())
+        .await
+    {
+        tracing::error!(worker = id, "QoS error: {e}");
+        return None;
+    }
+
+    let stream = match channel
+        .basic_consume(
+            queue.as_ref().into(),
+            tag.into(),
+            BasicConsumeOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!(worker = id, "Consume error: {e}");
+            tokio::time::sleep(*backoff).await;
+            *backoff = (*backoff * 2).min(Duration::from_secs(30));
+            return None;
+        }
+    };
+
+    Some(WorkerChannel { conn, stream })
+}
+
+async fn consume_loop<D: Clone + Send + 'static>(
+    id: usize,
+    stream: &mut lapin::Consumer,
+    handlers: &Arc<HandlerMap<D>>,
+    deps: &D,
+    shutdown: &Shutdown,
+) -> LoopExit {
+    loop {
+        tokio::select! {
+            biased;
+            _ = shutdown.wait() => return LoopExit::StreamClosed, // triggers outer return
+            item = stream.next() => match item {
+                Some(Ok(delivery)) => {
+                    tokio::spawn(process_delivery(
+                        Arc::clone(handlers),
+                        deps.clone(),
+                        delivery,
+                    ));
+                }
+                Some(Err(e)) => {
+                    tracing::error!(worker = id, "Delivery error: {e}");
+                    return LoopExit::StreamError;
+                }
+                None => {
+                    tracing::warn!(worker = id, "Stream closed");
+                    return LoopExit::StreamClosed;
+                }
+            }
+        }
+    }
+}
+
+async fn run_worker<D: Clone + Send + 'static>(
+    id: usize,
+    queue: Arc<str>,
+    deps: D,
+    handlers: Arc<HandlerMap<D>>,
+    consumer_prefetch: u16,
+    manager: Arc<RabbitConnectionManager>,
+    shutdown: Shutdown,
+) {
+    let tag = format!("tokio-{}-{}", std::process::id(), id);
+    let mut backoff = Duration::from_millis(500);
+
+    loop {
+        if shutdown.is_triggered() {
+            return;
+        }
+
+        let Some(mut wc) =
+            setup_channel(id, &queue, &tag, consumer_prefetch, &manager, &mut backoff).await
+        else {
+            continue;
+        };
+
+        backoff = Duration::from_millis(500);
+        let exit = consume_loop(id, &mut wc.stream, &handlers, &deps, &shutdown).await;
+
+        if shutdown.is_triggered() {
+            return;
+        }
+
+        if !wc.conn.status().connected() {
+            manager.invalidate().await;
+        }
+
+        match exit {
+            LoopExit::StreamError => {
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(Duration::from_secs(30));
+            }
+            LoopExit::StreamClosed => {
+                backoff = Duration::from_millis(500);
+            }
+        }
+    }
+}
+
+async fn process_delivery<D: Clone + Send + 'static>(
+    handlers: Arc<HandlerMap<D>>,
+    deps: D,
+    delivery: Delivery,
+) {
+    let Some(headers) = delivery.properties.headers().as_ref() else {
+        let _ = delivery.nack(BASIC_NACK).await;
+        return;
+    };
+
+    let msg_type = headers.inner().get("type").and_then(|v| {
+        if let AMQPValue::LongString(s) = v {
+            std::str::from_utf8(s.as_bytes()).ok()
+        } else {
+            None
+        }
+    });
+
+    let confirmation = match msg_type.and_then(|t| handlers.get(t)) {
+        Some(handler) => {
+            let incoming = IncomingMessage {
+                data: &delivery.data,
+                headers,
+                delivery_tag: delivery.delivery_tag,
+                routing_key: delivery.routing_key.as_str(),
+            };
+            handler.call(deps, incoming).await
+        }
+        None => Confirmation::Nack,
+    };
+
+    let _ = match confirmation {
+        Confirmation::Ack => delivery.ack(BASIC_ACK).await,
+        Confirmation::Nack => delivery.nack(BASIC_NACK).await,
+        Confirmation::Requeue => delivery.nack(BASIC_REQUEUE).await,
+    };
+}

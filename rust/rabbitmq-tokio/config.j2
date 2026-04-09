@@ -1,0 +1,68 @@
+{# type=static,filename=rabbitmq/config.rs,min_version=0.2.0 #}
+use serde::Deserialize;
+use serde::de;
+use std::{fmt, fmt::Display, marker::PhantomData, str::FromStr};
+
+#[derive(Debug, Clone)]
+pub struct RabbitConfiguration {
+    pub uri: String,
+    pub connection_name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct RabbitMQConfiguration {
+    #[serde(rename = "rabbitmq_uri")]
+    pub rabbitmq_uri: String,
+
+    #[serde(rename = "rabbitmq_connection_name")]
+    pub rabbitmq_connection_name: String,
+}
+
+impl Default for RabbitMQConfiguration {
+    fn default() -> Self {
+        Self {
+            rabbitmq_uri: "amqp://guest:guest@localhost:5672/%2f".to_string(),
+            rabbitmq_connection_name: "rabbit".to_string(),
+        }
+    }
+}
+
+impl From<RabbitMQConfiguration> for RabbitConfiguration {
+    fn from(config: RabbitMQConfiguration) -> Self {
+        Self {
+            uri: config.rabbitmq_uri,
+            connection_name: config.rabbitmq_connection_name,
+        }
+    }
+}
+
+// todo: remove once https://github.com/softprops/envy/issues/26 is resolved
+pub fn deserialize_stringified_any<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: de::Deserializer<'de>,
+    T: FromStr,
+    T::Err: Display,
+{
+    deserializer.deserialize_any(StringifiedAnyVisitor(PhantomData))
+}
+
+pub struct StringifiedAnyVisitor<T>(PhantomData<T>);
+
+impl<'de, T> de::Visitor<'de> for StringifiedAnyVisitor<T>
+where
+    T: FromStr,
+    T::Err: Display,
+{
+    type Value = T;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a string containing json data")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Self::Value::from_str(v).map_err(E::custom)
+    }
+}

@@ -1,0 +1,221 @@
+{# type=static,filename=rabbitmq/producer.rs,min_version=0.2.0 #}
+use super::RabbitConnectionManager;
+use super::message::PublishMessage;
+
+use anyhow::Context;
+use arc_swap::ArcSwap;
+use lapin::{BasicProperties, Channel, options::*};
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Mutex;
+
+#[derive(Debug)]
+pub struct RabbitProducer {
+    manager: Arc<RabbitConnectionManager>,
+    channel: ArcSwap<Option<Channel>>,
+    reconnect_lock: Mutex<()>,
+}
+
+const PUBLISH_OPTIONS: BasicPublishOptions = BasicPublishOptions {
+    mandatory: false,
+    immediate: false,
+};
+
+impl RabbitProducer {
+    pub fn new(manager: Arc<RabbitConnectionManager>) -> Self {
+        Self {
+            manager,
+            channel: ArcSwap::new(empty_channel()),
+            reconnect_lock: Mutex::new(()),
+        }
+    }
+
+    /// Hot path: single atomic load, no lock, no allocation.
+    /// Falls through to reconnect only when the channel is missing or dead.
+    async fn get_channel(&self) -> anyhow::Result<Channel> {
+        let current = self.channel.load();
+        if let Some(ch) = current.as_ref()
+            && ch.status().connected()
+        {
+            return Ok(ch.clone());
+        }
+        self.reconnect_channel().await
+    }
+
+    /// Slow path: called only on first use or after a channel failure.
+    /// The mutex serializes concurrent reconnect attempts so exactly one
+    /// caller does the work; the rest double-check and reuse the result.
+    async fn reconnect_channel(&self) -> anyhow::Result<Channel> {
+        let _guard = self.reconnect_lock.lock().await;
+
+        let current = self.channel.load();
+        if let Some(ch) = current.as_ref()
+            && ch.status().connected()
+        {
+            return Ok(ch.clone());
+        }
+
+        let conn = self.manager.get().await?;
+        let ch = conn.create_channel().await?;
+
+        ch.confirm_select(ConfirmSelectOptions::default())
+            .await
+            .context("confirm_select failed")?;
+
+        self.channel.store(Arc::new(Some(ch.clone())));
+        Ok(ch)
+    }
+
+    /// Drops the cached channel so the next call to get_channel reconnects.
+    /// Does not touch the connection-level manager — a dead channel does not
+    /// imply a dead connection.
+    async fn invalidate(&self) {
+        self.channel.store(empty_channel());
+    }
+
+    pub async fn publish_raw(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        payload: &[u8],
+    ) -> anyhow::Result<()> {
+        let ch = self.get_channel().await?;
+
+        let confirm = ch
+            .basic_publish(
+                exchange.into(),
+                routing_key.into(),
+                PUBLISH_OPTIONS,
+                payload,
+                BasicProperties::default(),
+            )
+            .await?
+            .await;
+
+        match confirm {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                self.invalidate().await;
+                Err(e.into())
+            }
+        }
+    }
+
+    pub async fn publish<T>(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        message: T,
+    ) -> anyhow::Result<()>
+    where
+        T: PublishMessage,
+    {
+        let (headers, payload) = message.into_parts();
+        let payload_bytes = serde_json::to_vec(&payload)?;
+        let props = BasicProperties::default().with_headers(headers);
+        let ch = self.get_channel().await?;
+
+        let confirm = ch
+            .basic_publish(
+                exchange.into(),
+                routing_key.into(),
+                PUBLISH_OPTIONS,
+                &payload_bytes,
+                props,
+            )
+            .await?
+            .await;
+
+        match confirm {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                self.invalidate().await;
+                Err(e.into())
+            }
+        }
+    }
+
+    /// Publishes all messages back-to-back without waiting for broker confirms
+    /// between each one — lapin pipelines the writes into the socket buffer.
+    /// A single wait_for_confirms() at the end drains all pending acks in one
+    /// round-trip, regardless of batch size.
+    pub async fn batch_publish_raw(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        messages: Vec<&[u8]>,
+    ) -> anyhow::Result<()> {
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let ch = self.get_channel().await?;
+
+        for payload in messages {
+            ch.basic_publish(
+                exchange.into(),
+                routing_key.into(),
+                PUBLISH_OPTIONS,
+                payload,
+                BasicProperties::default(),
+            )
+            .await?;
+        }
+
+        if let Err(e) = ch.wait_for_confirms().await.context("batch confirm failed") {
+            self.invalidate().await;
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    pub async fn batch_publish<T>(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        messages: Vec<T>,
+    ) -> anyhow::Result<()>
+    where
+        T: PublishMessage,
+    {
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let prepared_messages: Vec<(Vec<u8>, BasicProperties)> = messages
+            .into_iter()
+            .map(|msg| {
+                let (headers, payload) = msg.into_parts();
+                Ok((
+                    serde_json::to_vec(&payload)?,
+                    BasicProperties::default().with_headers(headers),
+                ))
+            })
+            .collect::<anyhow::Result<_>>()?;
+
+        let ch = self.get_channel().await?;
+
+        for (payload, props) in prepared_messages {
+            ch.basic_publish(
+                exchange.into(),
+                routing_key.into(),
+                PUBLISH_OPTIONS,
+                &payload,
+                props,
+            )
+            .await?;
+        }
+
+        if let Err(e) = ch.wait_for_confirms().await.context("batch confirm failed") {
+            self.invalidate().await;
+            return Err(e);
+        }
+
+        Ok(())
+    }
+}
+
+fn empty_channel() -> Arc<Option<Channel>> {
+    static EMPTY: OnceLock<Arc<Option<Channel>>> = OnceLock::new();
+    EMPTY.get_or_init(|| Arc::new(None)).clone()
+}

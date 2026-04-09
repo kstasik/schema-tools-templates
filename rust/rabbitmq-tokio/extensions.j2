@@ -1,0 +1,29 @@
+{%- import "extra.j2" as ext -%}
+{% macro model_object_impl(model, options) %}
+{% set names = model.object.properties | map(attribute="name") %}
+{% set type_property = model.object.properties | filter(attribute="name", value="type") | first %}
+{% if type_property and type_property.type == "const" %}
+{% set message_rust_name = model.object.name | trim_end_matches(pat="Meta") %}
+impl super::Message for {{ m::model_name(name = message_rust_name) }} {
+    fn message_type() -> &'static str {
+        "{{ type_property.model.name }}"
+    }
+}
+
+impl super::PublishMessage for {{ m::model_name(name = message_rust_name) }} {
+    type Payload = Self;
+
+    fn into_parts(self) -> (FieldTable, Self::Payload) {
+        let mut headers = FieldTable::default();
+        headers.insert(
+            ShortString::from("type"),
+            AMQPValue::LongString(LongString::from(
+                "{{ type_property.model.name }}"
+            )),
+        );
+        (headers, self)
+    }
+}
+{% endif %}
+
+{% endmacro model_object_impl %}
