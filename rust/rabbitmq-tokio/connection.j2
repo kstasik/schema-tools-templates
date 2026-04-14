@@ -1,5 +1,4 @@
 {# type=static,filename=rabbitmq/connection.rs,min_version=0.2.0 #}
-use anyhow::Context;
 use lapin::{Connection, ConnectionProperties};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -42,21 +41,22 @@ impl RabbitConnectionManager {
     }
 
     #[inline]
-    pub async fn get_dedicated(&self) -> anyhow::Result<Arc<Connection>> {
+    pub async fn get_dedicated(
+        &self,
+    ) -> Result<Arc<Connection>, lapin::Error> {
         let conn = self.connect().await?;
         Ok(Arc::new(conn))
     }
 
-    async fn connect(&self) -> anyhow::Result<Connection> {
+    async fn connect(&self) -> Result<Connection, lapin::Error> {
         Connection::connect(
             &self.uri,
             ConnectionProperties::default().with_connection_name((*self.connection_name).into()),
         )
         .await
-        .context("Failed to connect to RabbitMQ")
     }
 
-    pub async fn get(&self) -> anyhow::Result<Arc<Connection>> {
+    pub async fn get(&self) -> Result<Arc<Connection>, lapin::Error> {
         {
             let guard = self.state.read().await;
             if let Some(conn) = &guard.connection

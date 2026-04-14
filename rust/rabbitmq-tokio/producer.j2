@@ -2,11 +2,11 @@
 use super::RabbitConnectionManager;
 use super::message::PublishMessage;
 
-use anyhow::Context;
 use arc_swap::ArcSwap;
 use lapin::{BasicProperties, Channel, options::*};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
+use std::io;
 
 #[derive(Debug)]
 pub struct RabbitProducer {
@@ -29,9 +29,7 @@ impl RabbitProducer {
         }
     }
 
-    /// Hot path: single atomic load, no lock, no allocation.
-    /// Falls through to reconnect only when the channel is missing or dead.
-    async fn get_channel(&self) -> anyhow::Result<Channel> {
+    async fn get_channel(&self) -> Result<Channel, lapin::Error> {
         let current = self.channel.load();
         if let Some(ch) = current.as_ref()
             && ch.status().connected()
@@ -41,10 +39,7 @@ impl RabbitProducer {
         self.reconnect_channel().await
     }
 
-    /// Slow path: called only on first use or after a channel failure.
-    /// The mutex serializes concurrent reconnect attempts so exactly one
-    /// caller does the work; the rest double-check and reuse the result.
-    async fn reconnect_channel(&self) -> anyhow::Result<Channel> {
+    async fn reconnect_channel(&self) -> Result<Channel, lapin::Error> {
         let _guard = self.reconnect_lock.lock().await;
 
         let current = self.channel.load();
@@ -58,16 +53,12 @@ impl RabbitProducer {
         let ch = conn.create_channel().await?;
 
         ch.confirm_select(ConfirmSelectOptions::default())
-            .await
-            .context("confirm_select failed")?;
+            .await?;
 
         self.channel.store(Arc::new(Some(ch.clone())));
         Ok(ch)
     }
 
-    /// Drops the cached channel so the next call to get_channel reconnects.
-    /// Does not touch the connection-level manager — a dead channel does not
-    /// imply a dead connection.
     async fn invalidate(&self) {
         self.channel.store(empty_channel());
     }
@@ -77,7 +68,7 @@ impl RabbitProducer {
         exchange: &str,
         routing_key: &str,
         payload: &[u8],
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), lapin::Error> {
         let ch = self.get_channel().await?;
 
         let confirm = ch
@@ -105,12 +96,12 @@ impl RabbitProducer {
         exchange: &str,
         routing_key: &str,
         message: T,
-    ) -> anyhow::Result<()>
+    ) -> Result<(), lapin::Error>
     where
         T: PublishMessage,
     {
         let (headers, payload) = message.into_parts();
-        let payload_bytes = serde_json::to_vec(&payload)?;
+        let payload_bytes = serde_json::to_vec(&payload).map_err(|e| lapin::Error::from(io::Error::new(io::ErrorKind::InvalidData, e)))?;
         let props = BasicProperties::default().with_headers(headers);
         let ch = self.get_channel().await?;
 
@@ -143,7 +134,7 @@ impl RabbitProducer {
         exchange: &str,
         routing_key: &str,
         messages: Vec<&[u8]>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), lapin::Error> {
         if messages.is_empty() {
             return Ok(());
         }
@@ -161,7 +152,10 @@ impl RabbitProducer {
             .await?;
         }
 
-        if let Err(e) = ch.wait_for_confirms().await.context("batch confirm failed") {
+        if let Err(e) = ch
+            .wait_for_confirms()
+            .await
+        {
             self.invalidate().await;
             return Err(e);
         }
@@ -174,7 +168,7 @@ impl RabbitProducer {
         exchange: &str,
         routing_key: &str,
         messages: Vec<T>,
-    ) -> anyhow::Result<()>
+    ) -> Result<(), lapin::Error>
     where
         T: PublishMessage,
     {
@@ -184,14 +178,16 @@ impl RabbitProducer {
 
         let prepared_messages: Vec<(Vec<u8>, BasicProperties)> = messages
             .into_iter()
-            .map(|msg| {
+            .map(|msg| -> Result<_, lapin::Error> {
                 let (headers, payload) = msg.into_parts();
                 Ok((
-                    serde_json::to_vec(&payload)?,
+                    serde_json::to_vec(&payload).map_err(|e| {
+                        lapin::Error::from(io::Error::new(io::ErrorKind::InvalidData, e))
+                    })?,
                     BasicProperties::default().with_headers(headers),
                 ))
             })
-            .collect::<anyhow::Result<_>>()?;
+            .collect::<Result<_, _>>()?;
 
         let ch = self.get_channel().await?;
 
@@ -206,7 +202,7 @@ impl RabbitProducer {
             .await?;
         }
 
-        if let Err(e) = ch.wait_for_confirms().await.context("batch confirm failed") {
+        if let Err(e) = ch.wait_for_confirms().await {
             self.invalidate().await;
             return Err(e);
         }

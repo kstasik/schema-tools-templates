@@ -27,9 +27,6 @@ fn key_tracestate() -> &'static ShortString {
     KEY_TRACESTATE.get_or_init(|| ShortString::from("tracestate"))
 }
 
-pub const SPAN_STATUS_OK: &str = "OK";
-pub const SPAN_STATUS_ERROR: &str = "ERROR";
-
 pub fn get_trace_propagator() -> &'static TraceContextPropagator {
     TRACE_PROPAGATOR.get_or_init(TraceContextPropagator::new)
 }

@@ -16,11 +16,7 @@ const SPAN_STATUS_OK: &str = "ok";
 pub mod message;
 {% if options.client | default(value="none") == "actix" %}#[rustfmt::skip]
 #[allow(dead_code, unused_imports)]
-pub mod actix;
-{% elif options.client | default(value="none") == "tokio" %}#[rustfmt::skip]
-#[allow(dead_code, unused_imports)]
-pub mod tokio;
-{% endif %}
+pub mod actix;{% endif %}
 
 pub trait MessageExtractor {
     fn get_type() -> String;
