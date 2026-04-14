@@ -2,28 +2,125 @@
 {% macro model_object_impl(model, options) %}
 {% set names = model.object.properties | map(attribute="name") %}
 {% set type_property = model.object.properties | filter(attribute="name", value="type") | first %}
-{% if type_property and type_property.type == "const" %}
-{% set message_rust_name = model.object.name | trim_end_matches(pat="Meta") %}
-impl super::Message for {{ m::model_name(name = message_rust_name) }} {
-    fn message_type() -> &'static str {
+{% if model.object.name is ending_with("Meta") and type_property %}
+
+impl std::convert::Into<FieldTable> for {{ m::model_name(name = model.object.name) }} {
+    fn into(self) -> FieldTable {
+        let mut headers = FieldTable::default();
+
+        {% for property in model.object.properties %}
+        {%- if property.required %}
+        {% if property.type == "const" %}
+        headers.insert(
+            ShortString::from("{{ property.name }}"),
+            AMQPValue::from(LongString::from("{{ property.model.name }}")),
+        );
+        {% else %}
+        headers.insert(
+            ShortString::from("{{ property.name }}"),
+            AMQPValue::from(LongString::from(self.{{ m::property_name(name = property.name) }})),
+        );
+        {% endif %}
+        {% else %}
+        if let Some(param) = self.{{ m::property_name(name = property.name) }} {
+            headers.insert(
+                ShortString::from("{{ property.name }}"),
+                AMQPValue::from(LongString::from({{ m::model_to_string(name = "param", property = property) }})),
+            );
+        }
+        {% endif %}
+        {% endfor %}
+
+        headers.insert(
+            ShortString::from("published-at"),
+            AMQPValue::from(LongString::from(generate_time_string()))
+        );
+
+        headers.insert(
+            ShortString::from("content-type"),
+            AMQPValue::from(LongString::from("application/json"))
+        );
+
+        headers
+    }
+}
+
+impl std::convert::From<FieldTable> for {{ m::model_name(name = model.object.name) }} {
+    fn from(ft: FieldTable) -> Self {
+        let bt = ft.inner();
+
+        Self {
+            {% for property in model.object.properties | filter_not(attribute="type", value="const") %}
+            {{ m::property_name(name = property.name) }}:
+                bt.get(
+                    "{{ property.name }}"
+                ).and_then(|s| match s {
+                    lapin::types::AMQPValue::LongString(s) => Some(s.to_string()),
+                    _ => None
+                })
+                {% if property.type == "enum" %}
+                .and_then(|s|
+                    {{ m::type(property = property, ns = "") }}::from_str(&s).ok() // todo: error
+                )
+                {% endif %},
+            {% endfor %}
+        }
+    }
+}
+
+impl {{ m::model_name(name = model.object.name) }} {
+    fn get_type() ->  &'static str {
         "{{ type_property.model.name }}"
     }
 }
 
-impl super::PublishMessage for {{ m::model_name(name = message_rust_name) }} {
-    type Payload = Self;
+{% elif names is containing("meta") and names is containing("payload") %}
+{% set meta = model.object.properties | filter(attribute="name", value="meta") | first %}
+{% set payload = model.object.properties | filter(attribute="name", value="payload") | first %}
 
+impl super::Message for {{ m::model_name(name = model.object.name) }} {
+    fn message_type() -> &'static str {
+        {{ m::type(property = meta) }}::get_type()
+    }
+}
+
+impl super::PublishMessage for {{ m::model_name(name = model.object.name) }} {
+    type Payload = {{ m::type(property = payload) }};
+    
     fn into_parts(self) -> (FieldTable, Self::Payload) {
         let mut headers = FieldTable::default();
         headers.insert(
             ShortString::from("type"),
             AMQPValue::LongString(LongString::from(
-                "{{ type_property.model.name }}"
+                {{ m::type(property = meta) }}::get_type()
             )),
         );
-        (headers, self)
+        (headers, self.payload)
     }
 }
-{% endif %}
 
+impl super::MessageExtractor for {{ m::model_name(name = model.object.name) }} {
+    fn message_type() -> &'static str {
+        {{ m::type(property = meta) }}::get_type()
+    }
+
+    fn extract_payload(headers: &FieldTable, payload: &[u8]) -> Option<Self> {
+        match serde_json::from_slice(payload) {
+            Ok(payload) => Some(Self {
+                meta: {{ m::type(property = meta) }}::from(headers.clone()),
+                payload: payload,
+            }),
+            Err(e) => {
+                tracing::error!(
+                    message_type = {{ m::type(property = meta) }}::get_type(),
+                    error = %e,
+                    "Failed to deserialize message"
+                );
+                None
+            }
+        }
+    }
+}
+
+{% endif %}
 {% endmacro model_object_impl %}

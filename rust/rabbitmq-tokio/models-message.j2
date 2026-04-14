@@ -17,33 +17,10 @@ pub trait Message: Sized {
 pub trait MessageExtractor: Sized {
     fn message_type() -> &'static str;
 
-    fn extract_payload(payload: &[u8]) -> Option<Self>;
+    fn extract_payload(headers: &FieldTable, payload: &[u8]) -> Option<Self>;
 
     fn extract_from_message(msg: &super::consumer::IncomingMessage<'_>) -> Option<Self> {
-        Self::extract_payload(msg.data)
-    }
-}
-
-impl<T> MessageExtractor for T
-where
-    T: Message + DeserializeOwned,
-{
-    fn message_type() -> &'static str {
-        T::message_type()
-    }
-
-    fn extract_payload(payload: &[u8]) -> Option<Self> {
-        match serde_json::from_slice(payload) {
-            Ok(value) => Some(value),
-            Err(e) => {
-                tracing::error!(
-                    message_type = %T::message_type(),
-                    error = %e,
-                    "Failed to deserialize message"
-                );
-                None
-            }
-        }
+        Self::extract_payload(msg.headers, msg.data)
     }
 }
 
