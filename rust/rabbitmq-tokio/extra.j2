@@ -1,0 +1,7 @@
+{% macro log(type, options) -%}{% filter trim %}
+{% if options.log | default(value = "tracing") == "tracing" %}
+tracing::{{ type }}!
+{% elif options.log == "log" %}
+log::{{ type }}!
+{% endif %}
+{% endfilter %}{%- endmacro log %}

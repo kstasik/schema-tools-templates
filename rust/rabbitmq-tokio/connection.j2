@@ -1,0 +1,104 @@
+{# type=static,filename=rabbitmq/connection.rs,min_version=0.2.0 #}
+use lapin::{Connection, ConnectionProperties};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+
+use super::RabbitConfiguration;
+
+#[derive(Debug)]
+struct ConnectionState {
+    connection: Option<Arc<Connection>>,
+    last_connect_attempt: Option<Instant>,
+}
+
+#[derive(Debug)]
+pub struct RabbitConnectionManager {
+    connection_name: Arc<str>,
+    uri: String,
+    state: RwLock<ConnectionState>,
+}
+
+impl RabbitConnectionManager {
+    pub fn new(config: RabbitConfiguration) -> Self {
+        Self {
+            connection_name: Arc::from(config.connection_name.as_str()),
+            uri: config.uri,
+            state: RwLock::new(ConnectionState {
+                connection: None,
+                last_connect_attempt: None,
+            }),
+        }
+    }
+
+    #[inline]
+    pub async fn get_if_ready(&self) -> Option<Arc<Connection>> {
+        let guard = self.state.read().await;
+        match &guard.connection {
+            Some(conn) if conn.status().connected() => Some(conn.clone()),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub async fn get_dedicated(
+        &self,
+    ) -> Result<Arc<Connection>, lapin::Error> {
+        let conn = self.connect().await?;
+        Ok(Arc::new(conn))
+    }
+
+    async fn connect(&self) -> Result<Connection, lapin::Error> {
+        Connection::connect(
+            &self.uri,
+            ConnectionProperties::default().with_connection_name((*self.connection_name).into()),
+        )
+        .await
+    }
+
+    pub async fn get(&self) -> Result<Arc<Connection>, lapin::Error> {
+        {
+            let guard = self.state.read().await;
+            if let Some(conn) = &guard.connection
+                && conn.status().connected()
+            {
+                return Ok(conn.clone());
+            }
+            if guard
+                .last_connect_attempt
+                .map(|ts| ts.elapsed() < Duration::from_millis(200))
+                .unwrap_or(false)
+            {
+                drop(guard);
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
+
+        let mut guard = self.state.write().await;
+
+        if let Some(conn) = &guard.connection
+            && conn.status().connected()
+        {
+            return Ok(conn.clone());
+        }
+
+        guard.last_connect_attempt = Some(Instant::now());
+
+        let conn = self.connect().await?;
+        let conn = Arc::new(conn);
+        guard.connection = Some(conn.clone());
+
+        Ok(conn)
+    }
+
+    #[inline]
+    pub async fn invalidate(&self) {
+        let mut guard = self.state.write().await;
+        guard.connection = None;
+    }
+
+    #[inline]
+    pub async fn is_connected(&self) -> bool {
+        self.get_if_ready().await.is_some()
+    }
+}
