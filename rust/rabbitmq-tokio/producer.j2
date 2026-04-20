@@ -1,0 +1,293 @@
+{# type=static,filename=rabbitmq/producer.rs,min_version=0.2.0 #}
+use super::RabbitConnectionManager;
+use super::message::PublishMessage;
+
+use arc_swap::ArcSwap;
+use lapin::{BasicProperties, Channel, options::*};
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
+use tokio::sync::Mutex;
+
+#[derive(Debug)]
+pub struct RabbitProducer {
+    manager: Arc<RabbitConnectionManager>,
+    channel: ArcSwap<Option<Channel>>,
+    reconnect_lock: Mutex<()>,
+}
+
+const PUBLISH_OPTIONS: BasicPublishOptions = BasicPublishOptions {
+    mandatory: false,
+    immediate: false,
+};
+
+const CHANNEL_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(30);
+
+impl RabbitProducer {
+    pub async fn new(manager: Arc<RabbitConnectionManager>) -> Result<Self, lapin::Error> {
+        let producer = Self {
+            manager,
+            channel: ArcSwap::new(empty_channel()),
+            reconnect_lock: Mutex::new(()),
+        };
+
+        producer.retry_connect(CHANNEL_ACQUIRE_TIMEOUT).await?;
+        Ok(producer)
+    }
+
+    async fn get_channel(&self) -> Result<Channel, lapin::Error> {
+        if let Some(ch) = self.healthy_channel() {
+            return Ok(ch);
+        }
+
+        tokio::time::timeout(
+            CHANNEL_ACQUIRE_TIMEOUT,
+            self.retry_connect(CHANNEL_ACQUIRE_TIMEOUT),
+        )
+            .await
+            .unwrap_or_else(|_| {
+                Err(lapin::Error::from(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out waiting for RabbitMQ channel",
+                )))
+            })
+    }
+
+    async fn retry_connect(
+        &self,
+        deadline: Duration,
+    ) -> Result<Channel, lapin::Error> {
+        const BASE: Duration = Duration::from_millis(500);
+        const MAX: Duration = Duration::from_secs(10);
+        let mut backoff = BASE;
+        let mut attempt = 0u32;
+
+        loop {
+            attempt += 1;
+
+            match self.try_establish_channel().await {
+                Ok(ch) => {
+                    if attempt > 1 {
+                        tracing::info!("RabbitMQ channel established after {attempt} attempts");
+                    }
+                    return Ok(ch);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt,
+                        backoff_ms = backoff.as_millis(),
+                        timeout_secs = deadline.as_secs(),
+                        "RabbitMQ channel unavailable, retrying: {e}"
+                    );
+                    tokio::time::sleep(backoff).await;
+                    backoff = (backoff * 2).min(MAX);
+                }
+            }
+        }
+    }
+
+    async fn try_establish_channel(&self) -> Result<Channel, lapin::Error> {
+        let _guard = self.reconnect_lock.lock().await;
+
+        if let Some(ch) = self.healthy_channel() {
+            return Ok(ch);
+        }
+
+        let conn = match self.manager.get().await {
+            Ok(c) => c,
+            Err(e) => return Err(e),
+        };
+
+        let ch = match conn.create_channel().await {
+            Ok(ch) => ch,
+            Err(e) => {
+                if !conn.status().connected() {
+                    self.manager.invalidate();
+                }
+                return Err(e);
+            }
+        };
+
+        if let Err(e) = ch.confirm_select(ConfirmSelectOptions::default()).await {
+            self.manager.invalidate();
+            return Err(e);
+        }
+
+        self.channel.store(Arc::new(Some(ch.clone())));
+        Ok(ch)
+    }
+
+    #[inline]
+    fn healthy_channel(&self) -> Option<Channel> {
+        let guard = self.channel.load();
+        let slot: &Option<Channel> = &**guard;
+        slot.as_ref()
+            .filter(|ch| ch.status().connected())
+            .cloned()
+    }
+
+    fn invalidate_channel(&self) {
+        self.channel.store(empty_channel());
+    }
+
+    pub async fn publish_raw(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        payload: &[u8],
+    ) -> Result<(), lapin::Error> {
+        let ch = self.get_channel().await?;
+
+        let confirm = ch
+            .basic_publish(
+                exchange.into(),
+                routing_key.into(),
+                PUBLISH_OPTIONS,
+                payload,
+                BasicProperties::default(),
+            )
+            .await?
+            .await;
+
+        match confirm {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                self.invalidate_channel();
+                self.manager.invalidate();
+                Err(e.into())
+            }
+        }
+    }
+
+    pub async fn publish<T>(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        message: T,
+    ) -> Result<(), lapin::Error>
+    where
+        T: PublishMessage,
+    {
+        let (headers, payload) = message.into_parts();
+        let payload_bytes = serde_json::to_vec(&payload)
+            .map_err(|e| lapin::Error::from(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
+        let props = BasicProperties::default().with_headers(headers);
+        let ch = self.get_channel().await?;
+
+        let confirm = ch
+            .basic_publish(
+                exchange.into(),
+                routing_key.into(),
+                PUBLISH_OPTIONS,
+                &payload_bytes,
+                props,
+            )
+            .await?
+            .await;
+
+        match confirm {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                self.invalidate_channel();
+                self.manager.invalidate();
+                Err(e.into())
+            }
+        }
+    }
+
+    pub async fn batch_publish_raw(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        messages: Vec<&[u8]>,
+    ) -> Result<(), lapin::Error> {
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let ch = self.get_channel().await?;
+
+        for payload in messages {
+            if let Err(e) = ch
+                .basic_publish(
+                    exchange.into(),
+                    routing_key.into(),
+                    PUBLISH_OPTIONS,
+                    payload,
+                    BasicProperties::default(),
+                )
+                .await
+            {
+                self.invalidate_channel();
+                self.manager.invalidate();
+                return Err(e);
+            }
+        }
+
+        if let Err(e) = ch.wait_for_confirms().await {
+            self.invalidate_channel();
+            self.manager.invalidate();
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    pub async fn batch_publish<T>(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        messages: Vec<T>,
+    ) -> Result<(), lapin::Error>
+    where
+        T: PublishMessage,
+    {
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let prepared: Vec<(Vec<u8>, BasicProperties)> = messages
+            .into_iter()
+            .map(|msg| -> Result<_, lapin::Error> {
+                let (headers, payload) = msg.into_parts();
+                Ok((
+                    serde_json::to_vec(&payload).map_err(|e| {
+                        lapin::Error::from(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+                    })?,
+                    BasicProperties::default().with_headers(headers),
+                ))
+            })
+            .collect::<Result<_, _>>()?;
+
+        let ch = self.get_channel().await?;
+
+        for (payload, props) in prepared {
+            if let Err(e) = ch
+                .basic_publish(
+                    exchange.into(),
+                    routing_key.into(),
+                    PUBLISH_OPTIONS,
+                    &payload,
+                    props,
+                )
+                .await
+            {
+                self.invalidate_channel();
+                self.manager.invalidate();
+                return Err(e);
+            }
+        }
+
+        if let Err(e) = ch.wait_for_confirms().await {
+            self.invalidate_channel();
+            self.manager.invalidate();
+            return Err(e);
+        }
+
+        Ok(())
+    }
+}
+
+fn empty_channel() -> Arc<Option<Channel>> {
+    static EMPTY: OnceLock<Arc<Option<Channel>>> = OnceLock::new();
+    EMPTY.get_or_init(|| Arc::new(None)).clone()
+}
