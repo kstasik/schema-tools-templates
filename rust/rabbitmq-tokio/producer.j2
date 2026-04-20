@@ -5,8 +5,8 @@ use super::message::PublishMessage;
 use arc_swap::ArcSwap;
 use lapin::{BasicProperties, Channel, options::*};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tokio::sync::Mutex;
-use std::io;
 
 #[derive(Debug)]
 pub struct RabbitProducer {
@@ -20,46 +20,112 @@ const PUBLISH_OPTIONS: BasicPublishOptions = BasicPublishOptions {
     immediate: false,
 };
 
+const CHANNEL_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl RabbitProducer {
-    pub fn new(manager: Arc<RabbitConnectionManager>) -> Self {
-        Self {
+    pub async fn new(manager: Arc<RabbitConnectionManager>) -> Result<Self, lapin::Error> {
+        let producer = Self {
             manager,
             channel: ArcSwap::new(empty_channel()),
             reconnect_lock: Mutex::new(()),
-        }
+        };
+
+        producer.retry_connect(CHANNEL_ACQUIRE_TIMEOUT).await?;
+        Ok(producer)
     }
 
     async fn get_channel(&self) -> Result<Channel, lapin::Error> {
-        let current = self.channel.load();
-        if let Some(ch) = current.as_ref()
-            && ch.status().connected()
-        {
-            return Ok(ch.clone());
+        if let Some(ch) = self.healthy_channel() {
+            return Ok(ch);
         }
-        self.reconnect_channel().await
+
+        tokio::time::timeout(
+            CHANNEL_ACQUIRE_TIMEOUT,
+            self.retry_connect(CHANNEL_ACQUIRE_TIMEOUT),
+        )
+            .await
+            .unwrap_or_else(|_| {
+                Err(lapin::Error::from(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out waiting for RabbitMQ channel",
+                )))
+            })
     }
 
-    async fn reconnect_channel(&self) -> Result<Channel, lapin::Error> {
+    async fn retry_connect(
+        &self,
+        deadline: Duration,
+    ) -> Result<Channel, lapin::Error> {
+        const BASE: Duration = Duration::from_millis(500);
+        const MAX: Duration = Duration::from_secs(10);
+        let mut backoff = BASE;
+        let mut attempt = 0u32;
+
+        loop {
+            attempt += 1;
+
+            match self.try_establish_channel().await {
+                Ok(ch) => {
+                    if attempt > 1 {
+                        tracing::info!("RabbitMQ channel established after {attempt} attempts");
+                    }
+                    return Ok(ch);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt,
+                        backoff_ms = backoff.as_millis(),
+                        timeout_secs = deadline.as_secs(),
+                        "RabbitMQ channel unavailable, retrying: {e}"
+                    );
+                    tokio::time::sleep(backoff).await;
+                    backoff = (backoff * 2).min(MAX);
+                }
+            }
+        }
+    }
+
+    async fn try_establish_channel(&self) -> Result<Channel, lapin::Error> {
         let _guard = self.reconnect_lock.lock().await;
 
-        let current = self.channel.load();
-        if let Some(ch) = current.as_ref()
-            && ch.status().connected()
-        {
-            return Ok(ch.clone());
+        if let Some(ch) = self.healthy_channel() {
+            return Ok(ch);
         }
 
-        let conn = self.manager.get().await?;
-        let ch = conn.create_channel().await?;
+        let conn = match self.manager.get().await {
+            Ok(c) => c,
+            Err(e) => return Err(e),
+        };
 
-        ch.confirm_select(ConfirmSelectOptions::default())
-            .await?;
+        let ch = match conn.create_channel().await {
+            Ok(ch) => ch,
+            Err(e) => {
+                if !conn.status().connected() {
+                    self.manager.invalidate();
+                }
+                return Err(e);
+            }
+        };
+
+        if let Err(e) = ch.confirm_select(ConfirmSelectOptions::default()).await {
+            self.manager.invalidate();
+            return Err(e);
+        }
 
         self.channel.store(Arc::new(Some(ch.clone())));
         Ok(ch)
     }
 
-    async fn invalidate(&self) {
+    #[inline]
+    fn healthy_channel(&self) -> Option<Channel> {
+        let guard = self.channel.load();
+        let slot: &Option<Channel> = &**guard;
+        slot.as_ref()
+            .filter(|ch| ch.status().connected())
+            .cloned()
+    }
+
+    fn invalidate_channel(&self) {
         self.channel.store(empty_channel());
     }
 
@@ -85,7 +151,8 @@ impl RabbitProducer {
         match confirm {
             Ok(_) => Ok(()),
             Err(e) => {
-                self.invalidate().await;
+                self.invalidate_channel();
+                self.manager.invalidate();
                 Err(e.into())
             }
         }
@@ -101,7 +168,8 @@ impl RabbitProducer {
         T: PublishMessage,
     {
         let (headers, payload) = message.into_parts();
-        let payload_bytes = serde_json::to_vec(&payload).map_err(|e| lapin::Error::from(io::Error::new(io::ErrorKind::InvalidData, e)))?;
+        let payload_bytes = serde_json::to_vec(&payload)
+            .map_err(|e| lapin::Error::from(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
         let props = BasicProperties::default().with_headers(headers);
         let ch = self.get_channel().await?;
 
@@ -119,16 +187,13 @@ impl RabbitProducer {
         match confirm {
             Ok(_) => Ok(()),
             Err(e) => {
-                self.invalidate().await;
+                self.invalidate_channel();
+                self.manager.invalidate();
                 Err(e.into())
             }
         }
     }
 
-    /// Publishes all messages back-to-back without waiting for broker confirms
-    /// between each one — lapin pipelines the writes into the socket buffer.
-    /// A single wait_for_confirms() at the end drains all pending acks in one
-    /// round-trip, regardless of batch size.
     pub async fn batch_publish_raw(
         &self,
         exchange: &str,
@@ -142,21 +207,25 @@ impl RabbitProducer {
         let ch = self.get_channel().await?;
 
         for payload in messages {
-            ch.basic_publish(
-                exchange.into(),
-                routing_key.into(),
-                PUBLISH_OPTIONS,
-                payload,
-                BasicProperties::default(),
-            )
-            .await?;
+            if let Err(e) = ch
+                .basic_publish(
+                    exchange.into(),
+                    routing_key.into(),
+                    PUBLISH_OPTIONS,
+                    payload,
+                    BasicProperties::default(),
+                )
+                .await
+            {
+                self.invalidate_channel();
+                self.manager.invalidate();
+                return Err(e);
+            }
         }
 
-        if let Err(e) = ch
-            .wait_for_confirms()
-            .await
-        {
-            self.invalidate().await;
+        if let Err(e) = ch.wait_for_confirms().await {
+            self.invalidate_channel();
+            self.manager.invalidate();
             return Err(e);
         }
 
@@ -176,13 +245,13 @@ impl RabbitProducer {
             return Ok(());
         }
 
-        let prepared_messages: Vec<(Vec<u8>, BasicProperties)> = messages
+        let prepared: Vec<(Vec<u8>, BasicProperties)> = messages
             .into_iter()
             .map(|msg| -> Result<_, lapin::Error> {
                 let (headers, payload) = msg.into_parts();
                 Ok((
                     serde_json::to_vec(&payload).map_err(|e| {
-                        lapin::Error::from(io::Error::new(io::ErrorKind::InvalidData, e))
+                        lapin::Error::from(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
                     })?,
                     BasicProperties::default().with_headers(headers),
                 ))
@@ -191,19 +260,26 @@ impl RabbitProducer {
 
         let ch = self.get_channel().await?;
 
-        for (payload, props) in prepared_messages {
-            ch.basic_publish(
-                exchange.into(),
-                routing_key.into(),
-                PUBLISH_OPTIONS,
-                &payload,
-                props,
-            )
-            .await?;
+        for (payload, props) in prepared {
+            if let Err(e) = ch
+                .basic_publish(
+                    exchange.into(),
+                    routing_key.into(),
+                    PUBLISH_OPTIONS,
+                    &payload,
+                    props,
+                )
+                .await
+            {
+                self.invalidate_channel();
+                self.manager.invalidate();
+                return Err(e);
+            }
         }
 
         if let Err(e) = ch.wait_for_confirms().await {
-            self.invalidate().await;
+            self.invalidate_channel();
+            self.manager.invalidate();
             return Err(e);
         }
 
