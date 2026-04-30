@@ -13,7 +13,9 @@ type Slot = Option<Arc<Connection>>;
 pub struct RabbitConnectionManager {
     connection_name: Arc<str>,
     uri: Arc<str>,
-    current: ArcSwap<Slot>,
+    /// Shared connection for publishers (bursty, short-lived channel use).
+    /// Consumers do NOT use this — they call `connect()` for dedicated connections.
+    shared: ArcSwap<Slot>,
     reconnect_gate: Mutex<Option<Instant>>,
 }
 
@@ -22,28 +24,44 @@ impl RabbitConnectionManager {
         Self {
             connection_name: Arc::from(config.connection_name.as_str()),
             uri: Arc::from(config.uri.as_str()),
-            current: ArcSwap::from_pointee(None),
+            shared: ArcSwap::from_pointee(None),
             reconnect_gate: Mutex::new(None),
         }
     }
 
     pub fn is_connected(&self) -> bool {
-        self.get_if_ready().is_some()
+        self.get_shared_if_ready().is_some()
     }
 
     pub fn invalidate(&self) {
-        self.current.store(Arc::new(None));
+        self.shared.store(Arc::new(None));
     }
 
+    /// Opens a **dedicated** connection for exclusive use by a single consumer
+    /// worker. Each worker should call this independently — never share the
+    /// returned connection with other workers. No caching, no gate.
+    pub async fn connect(&self) -> Result<Arc<Connection>, lapin::Error> {
+        let conn = Connection::connect(
+            &self.uri,
+            ConnectionProperties::default()
+                .with_connection_name((*self.connection_name).into()),
+        )
+        .await?;
+        Ok(Arc::new(conn))
+    }
+
+    /// Returns the **shared** connection, reconnecting if necessary.
+    /// Intended for publishers only. Multiple callers share one TCP stream,
+    /// so do not use this for long-lived consumer channels.
     pub async fn get(&self) -> Result<Arc<Connection>, lapin::Error> {
-        if let Some(conn) = self.get_if_ready() {
+        if let Some(conn) = self.get_shared_if_ready() {
             return Ok(conn);
         }
 
         let mut last_attempt = self.reconnect_gate.lock().await;
 
-        // Other worker may have connected while this waited for gate
-        if let Some(conn) = self.get_if_ready() {
+        // Another caller may have reconnected while we waited for the gate.
+        if let Some(conn) = self.get_shared_if_ready() {
             return Ok(conn);
         }
 
@@ -53,7 +71,7 @@ impl RabbitConnectionManager {
             if elapsed < cooldown {
                 drop(last_attempt);
                 tokio::time::sleep(cooldown - elapsed).await;
-                if let Some(conn) = self.get_if_ready() {
+                if let Some(conn) = self.get_shared_if_ready() {
                     return Ok(conn);
                 }
                 last_attempt = self.reconnect_gate.lock().await;
@@ -67,22 +85,18 @@ impl RabbitConnectionManager {
             ConnectionProperties::default()
                 .with_connection_name((*self.connection_name).into()),
         )
-            .await?;
+        .await?;
 
         let conn = Arc::new(conn);
-
-        self.current.store(Arc::new(Some(conn.clone())));
-
+        self.shared.store(Arc::new(Some(conn.clone())));
         drop(last_attempt);
 
         Ok(conn)
     }
 
-    fn get_if_ready(&self) -> Option<Arc<Connection>> {
-        let guard = self.current.load();
+    fn get_shared_if_ready(&self) -> Option<Arc<Connection>> {
+        let guard = self.shared.load();
         let slot: &Slot = &**guard;
-        slot.as_ref()
-            .filter(|c| c.status().connected())
-            .cloned()
+        slot.as_ref().filter(|c| c.status().connected()).cloned()
     }
 }
