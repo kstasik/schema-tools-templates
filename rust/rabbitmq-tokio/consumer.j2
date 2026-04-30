@@ -16,24 +16,24 @@ use tokio::sync::Semaphore;
 
 const BASIC_ACK: BasicAckOptions = BasicAckOptions { multiple: false };
 const BASIC_NACK: BasicNackOptions = BasicNackOptions {
-multiple: false,
-requeue: false,
+    multiple: false,
+    requeue: false,
 };
 const BASIC_REQUEUE: BasicNackOptions = BasicNackOptions {
-multiple: false,
-requeue: true,
+    multiple: false,
+    requeue: true,
 };
 
 enum LoopExit {
-StreamError,
-StreamClosed,
+    StreamError,
+    StreamClosed,
 }
 
 #[derive(Debug, Clone)]
 pub enum Confirmation {
-Ack,
-Nack,
-Requeue,
+    Ack,
+    Nack,
+    Requeue,
 }
 
 impl From<()> for Confirmation {
@@ -194,7 +194,6 @@ async fn setup_worker_channel(
     manager: &Arc<RabbitConnectionManager>,
     backoff: &mut Duration,
 ) -> Option<(Arc<lapin::Connection>, lapin::Consumer)> {
-    // Each worker gets its own connection — no shared TCP stream.
     let conn = match manager.connect().await {
         Ok(c) => c,
         Err(e) => {
@@ -225,8 +224,8 @@ async fn setup_worker_channel(
 
     let stream = match channel
         .basic_consume(
-            queue.as_ref(),
-            tag,
+            queue.as_ref().into(),
+            tag.into(),
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
@@ -245,13 +244,11 @@ async fn setup_worker_channel(
     Some((conn, stream))
 }
 
-async fn consume_loop<D: Clone + Send + 'static>(
+async fn consume_loop<D: Clone + Send + Sync + 'static>(
     id: usize,
     stream: &mut lapin::Consumer,
     handlers: &Arc<HandlerMap<D>>,
     deps: &D,
-    // Semaphore sized to prefetch — caps concurrent in-flight tasks to match
-    // what RabbitMQ will actually send us. Prevents unbounded task explosion.
     sem: &Arc<Semaphore>,
     shutdown: &Shutdown,
 ) -> LoopExit {
@@ -261,20 +258,16 @@ async fn consume_loop<D: Clone + Send + 'static>(
             _ = shutdown.wait() => return LoopExit::StreamClosed,
             item = stream.next() => match item {
                 Some(Ok(delivery)) => {
-                    // Acquire before spawning so we never have more tasks in
-                    // flight than the prefetch window allows.
                     let permit = Arc::clone(sem)
                         .acquire_owned()
                         .await
                         .expect("semaphore closed");
 
+                    let handlers_owned: Arc<HandlerMap<D>> = Arc::clone(handlers);
+                    let deps_owned: D = deps.clone();
+
                     tokio::spawn(async move {
-                        process_delivery(
-                            Arc::clone(handlers),
-                            deps.clone(),
-                            delivery,
-                        )
-                        .await;
+                        process_delivery(handlers_owned, deps_owned, delivery).await;
                         drop(permit);
                     });
                 }
@@ -291,7 +284,7 @@ async fn consume_loop<D: Clone + Send + 'static>(
     }
 }
 
-async fn run_worker<D: Clone + Send + 'static>(
+async fn run_worker<D: Clone + Send + Sync + 'static>(
     id: usize,
     queue: Arc<str>,
     deps: D,
@@ -302,7 +295,6 @@ async fn run_worker<D: Clone + Send + 'static>(
 ) {
     let tag = format!("rust-tokio-consumer-{}-{}", std::process::id(), id);
     let mut backoff = Duration::from_millis(500);
-    // One semaphore per worker, sized to its own prefetch window.
     let sem = Arc::new(Semaphore::new(consumer_prefetch as usize));
 
     loop {
@@ -311,8 +303,7 @@ async fn run_worker<D: Clone + Send + 'static>(
         }
 
         let Some((conn, mut stream)) =
-            setup_worker_channel(id, &queue, &tag, consumer_prefetch, &manager, &mut backoff)
-                .await
+            setup_worker_channel(id, &queue, &tag, consumer_prefetch, &manager, &mut backoff).await
         else {
             continue;
         };
@@ -323,8 +314,6 @@ async fn run_worker<D: Clone + Send + 'static>(
             return;
         }
 
-        // Only the connection that failed needs closing — other workers are
-        // unaffected because they own separate connections.
         if !conn.status().connected() {
             tracing::warn!(worker = id, "Connection dropped, reconnecting");
         }
