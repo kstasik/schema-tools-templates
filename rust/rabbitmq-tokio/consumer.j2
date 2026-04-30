@@ -12,10 +12,17 @@ use std::future::{self, Future};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::Instrument;
 
 const BASIC_ACK: BasicAckOptions = BasicAckOptions { multiple: false };
-const BASIC_NACK: BasicNackOptions = BasicNackOptions { multiple: false, requeue: false };
-const BASIC_REQUEUE: BasicNackOptions = BasicNackOptions { multiple: false, requeue: true };
+const BASIC_NACK: BasicNackOptions = BasicNackOptions {
+    multiple: false,
+    requeue: false,
+};
+const BASIC_REQUEUE: BasicNackOptions = BasicNackOptions {
+    multiple: false,
+    requeue: true,
+};
 
 enum LoopExit {
     StreamError,
@@ -35,7 +42,9 @@ pub enum Confirmation {
 }
 
 impl From<()> for Confirmation {
-    fn from(_: ()) -> Self { Confirmation::Ack }
+    fn from(_: ()) -> Self {
+        Confirmation::Ack
+    }
 }
 
 impl<O, E> From<Result<O, E>> for Confirmation
@@ -84,7 +93,9 @@ where
     Response::Output: Into<Confirmation>,
 {
     pub fn new<F: Fn(T, D) -> Response + Send + Sync + 'static>(handler: F) -> Self {
-        Self { handler: Box::new(handler) }
+        Self {
+            handler: Box::new(handler),
+        }
     }
 }
 
@@ -93,7 +104,7 @@ where
     T: MessageExtractor + 'static,
     Response: Future + Send + 'static,
     Response::Output: Into<Confirmation>,
-    D: 'static,
+    D: Send + 'static,
 {
     fn call(
         &self,
@@ -112,7 +123,7 @@ where
 
 pub struct RabbitConsumer<D: Clone + Send + 'static> {
     queue: Arc<str>,
-    dependencies: D,
+    dependencies: Arc<D>,
     handlers: HandlerMap<D>,
     consumer_prefetch: u16,
     workers: usize,
@@ -132,7 +143,7 @@ where
     ) -> Self {
         Self {
             queue: queue.into(),
-            dependencies,
+            dependencies: Arc::new(dependencies),
             handlers: FxHashMap::default(),
             consumer_prefetch,
             workers: workers.unwrap_or(1),
@@ -147,7 +158,8 @@ where
         Response: Future + Send + 'static,
         Response::Output: Into<Confirmation>,
     {
-        self.handlers.insert(M::message_type(), Box::new(MessageHandler::new(handler)));
+        self.handlers
+            .insert(M::message_type(), Box::new(MessageHandler::new(handler)));
         self
     }
 
@@ -161,7 +173,7 @@ where
             let handle = tokio::spawn(run_worker(
                 i,
                 Arc::clone(&self.queue),
-                self.dependencies.clone(),
+                Arc::clone(&self.dependencies),
                 Arc::clone(&handlers),
                 self.consumer_prefetch,
                 Arc::clone(&self.manager),
@@ -208,7 +220,10 @@ async fn setup_channel(
         }
     };
 
-    if let Err(e) = channel.basic_qos(consumer_prefetch, BasicQosOptions::default()).await {
+    if let Err(e) = channel
+        .basic_qos(consumer_prefetch, BasicQosOptions::default())
+        .await
+    {
         tracing::error!(worker = id, "QoS error: {e}");
         return None;
     }
@@ -235,11 +250,11 @@ async fn setup_channel(
     Some(WorkerChannel { conn, stream })
 }
 
-async fn consume_loop<D: Clone + Send + 'static>(
+async fn consume_loop<D: Clone + Send + Sync + 'static>(
     id: usize,
     stream: &mut lapin::Consumer,
     handlers: &Arc<HandlerMap<D>>,
-    deps: &D,
+    deps: &Arc<D>,
     shutdown: &Shutdown,
 ) -> LoopExit {
     loop {
@@ -248,7 +263,7 @@ async fn consume_loop<D: Clone + Send + 'static>(
             _ = shutdown.wait() => return LoopExit::StreamClosed,
             item = stream.next() => match item {
                 Some(Ok(delivery)) => {
-                    process_delivery(handlers, deps.clone(), delivery).await;
+                    tokio::spawn(process_delivery(Arc::clone(handlers), deps.as_ref().clone(), delivery));
                 }
                 Some(Err(e)) => {
                     tracing::error!(worker = id, "Delivery error: {e}");
@@ -263,10 +278,10 @@ async fn consume_loop<D: Clone + Send + 'static>(
     }
 }
 
-async fn run_worker<D: Clone + Send + 'static>(
+async fn run_worker<D: Clone + Send + Sync + 'static>(
     id: usize,
     queue: Arc<str>,
-    deps: D,
+    deps: Arc<D>,
     handlers: Arc<HandlerMap<D>>,
     consumer_prefetch: u16,
     manager: Arc<RabbitConnectionManager>,
@@ -308,8 +323,8 @@ async fn run_worker<D: Clone + Send + 'static>(
     }
 }
 
-async fn process_delivery<D: Clone + Send + 'static>(
-    handlers: &Arc<HandlerMap<D>>,
+async fn process_delivery<D: Clone + Send + Sync + 'static>(
+    handlers: Arc<HandlerMap<D>>,
     deps: D,
     delivery: Delivery,
 ) {
@@ -326,27 +341,44 @@ async fn process_delivery<D: Clone + Send + 'static>(
         }
     });
 
-    let confirmation = match msg_type.and_then(|t| handlers.get(t)) {
-        Some(handler) => {
-            handler.call(deps, IncomingMessage {
-                data: &delivery.data,
-                headers,
-                delivery_tag: delivery.delivery_tag,
-                routing_key: delivery.routing_key.as_str(),
-            }).await
-        }
-        None => {
-            tracing::error!(
-                "No handler for message type '{}' (nacked)",
-                msg_type.unwrap_or("<missing type header>")
-            );
-            Confirmation::Nack
-        }
-    };
+    let span = tracing::info_span!(
+        "process_message",
+        msg_type = msg_type.unwrap_or("<missing>"),
+        routing_key = delivery.routing_key.as_str(),
+    );
 
-    let _ = match confirmation {
+    let confirmation = async {
+        match msg_type.and_then(|t| handlers.get(t)) {
+            Some(handler) => {
+                handler
+                    .call(
+                        deps,
+                        IncomingMessage {
+                            data: &delivery.data,
+                            headers,
+                            delivery_tag: delivery.delivery_tag,
+                            routing_key: delivery.routing_key.as_str(),
+                        },
+                    )
+                    .await
+            }
+            None => {
+                tracing::error!(
+                    "No handler for message type '{}' (nacked)",
+                    msg_type.unwrap_or("<missing type header>")
+                );
+                Confirmation::Nack
+            }
+        }
+    }
+    .instrument(span)
+    .await;
+
+    if let Err(e) = match confirmation {
         Confirmation::Ack => delivery.ack(BASIC_ACK).await,
         Confirmation::Nack => delivery.nack(BASIC_NACK).await,
         Confirmation::Requeue => delivery.nack(BASIC_REQUEUE).await,
-    };
+    } {
+        tracing::warn!("Failed to ack/nack delivery: {e}");
+    }
 }
