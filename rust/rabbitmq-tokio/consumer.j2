@@ -248,7 +248,7 @@ async fn consume_loop<D: Clone + Send + 'static>(
             _ = shutdown.wait() => return LoopExit::StreamClosed,
             item = stream.next() => match item {
                 Some(Ok(delivery)) => {
-                    tokio::spawn(process_delivery(Arc::clone(handlers), deps.clone(), delivery));
+                    process_delivery(handlers, deps.clone(), delivery).await;
                 }
                 Some(Err(e)) => {
                     tracing::error!(worker = id, "Delivery error: {e}");
@@ -309,7 +309,7 @@ async fn run_worker<D: Clone + Send + 'static>(
 }
 
 async fn process_delivery<D: Clone + Send + 'static>(
-    handlers: Arc<HandlerMap<D>>,
+    handlers: &Arc<HandlerMap<D>>,
     deps: D,
     delivery: Delivery,
 ) {
