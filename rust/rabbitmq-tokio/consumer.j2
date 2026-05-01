@@ -12,6 +12,8 @@ use std::future::{self, Future};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tracing::Instrument;
 
 const BASIC_ACK: BasicAckOptions = BasicAckOptions { multiple: false };
@@ -256,26 +258,43 @@ async fn consume_loop<D: Clone + Send + Sync + 'static>(
     handlers: &Arc<HandlerMap<D>>,
     deps: &Arc<D>,
     shutdown: &Shutdown,
+    semaphore: &Arc<Semaphore>,
 ) -> LoopExit {
-    loop {
+    let mut join_set = JoinSet::new();
+
+    let exit = loop {
+        while join_set.try_join_next().is_some() {}
+
         tokio::select! {
             biased;
-            _ = shutdown.wait() => return LoopExit::StreamClosed,
+            _ = shutdown.wait() => break LoopExit::StreamClosed,
             item = stream.next() => match item {
                 Some(Ok(delivery)) => {
-                    tokio::spawn(process_delivery(Arc::clone(handlers), deps.as_ref().clone(), delivery));
+                    let permit = Arc::clone(semaphore)
+                        .acquire_owned()
+                        .await
+                        .expect("semaphore closed");
+                    let handlers = Arc::clone(handlers);
+                    let deps = Arc::clone(deps);
+                    join_set.spawn(async move {
+                        process_delivery(handlers, deps, delivery).await;
+                        drop(permit);
+                    });
                 }
                 Some(Err(e)) => {
                     tracing::error!(worker = id, "Delivery error: {e}");
-                    return LoopExit::StreamError;
+                    break LoopExit::StreamError;
                 }
                 None => {
                     tracing::warn!(worker = id, "Stream closed");
-                    return LoopExit::StreamClosed;
+                    break LoopExit::StreamClosed;
                 }
             }
         }
-    }
+    };
+
+    join_set.join_all().await;
+    exit
 }
 
 async fn run_worker<D: Clone + Send + Sync + 'static>(
@@ -289,6 +308,7 @@ async fn run_worker<D: Clone + Send + Sync + 'static>(
 ) {
     let tag = format!("rust-tokio-consumer {}-{}", std::process::id(), id);
     let mut backoff = Duration::from_millis(500);
+    let semaphore = Arc::new(Semaphore::new(consumer_prefetch as usize));
 
     loop {
         if shutdown.is_triggered() {
@@ -301,7 +321,7 @@ async fn run_worker<D: Clone + Send + Sync + 'static>(
             continue;
         };
 
-        let exit = consume_loop(id, &mut wc.stream, &handlers, &deps, &shutdown).await;
+        let exit = consume_loop(id, &mut wc.stream, &handlers, &deps, &shutdown, &semaphore).await;
 
         if shutdown.is_triggered() {
             return;
@@ -325,7 +345,7 @@ async fn run_worker<D: Clone + Send + Sync + 'static>(
 
 async fn process_delivery<D: Clone + Send + Sync + 'static>(
     handlers: Arc<HandlerMap<D>>,
-    deps: D,
+    deps: Arc<D>,
     delivery: Delivery,
 ) {
     let Some(headers) = delivery.properties.headers().as_ref() else {
@@ -341,18 +361,22 @@ async fn process_delivery<D: Clone + Send + Sync + 'static>(
         }
     });
 
-    let span = tracing::info_span!(
-        "process_message",
-        msg_type = msg_type.unwrap_or("<missing>"),
-        routing_key = delivery.routing_key.as_str(),
-    );
+    let span = if tracing::level_enabled!(tracing::Level::INFO) {
+        tracing::info_span!(
+            "process_message",
+            msg_type = msg_type.unwrap_or("<missing>"),
+            routing_key = delivery.routing_key.as_str(),
+        )
+    } else {
+        tracing::Span::none()
+    };
 
     let confirmation = async {
         match msg_type.and_then(|t| handlers.get(t)) {
             Some(handler) => {
                 handler
                     .call(
-                        deps,
+                        (*deps).clone(),
                         IncomingMessage {
                             data: &delivery.data,
                             headers,
