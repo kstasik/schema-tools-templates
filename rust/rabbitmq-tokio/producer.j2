@@ -4,9 +4,47 @@ use super::message::PublishMessage;
 
 use arc_swap::ArcSwap;
 use lapin::{BasicProperties, Channel, options::*};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::Mutex;
+
+pub trait Publisher: Send + Sync {
+    fn publish_raw<'a>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        payload: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>>;
+
+    fn publish<'a, T>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        message: T,
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>>
+    where
+        T: PublishMessage + Send + 'a;
+}
+
+pub trait BatchPublisher: Send + Sync {
+    fn batch_publish_raw<'a>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        messages: Vec<&'a [u8]>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>>;
+
+    fn batch_publish<'a, T>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        messages: Vec<T>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>>
+    where
+        T: PublishMessage + Send + 'a;
+}
 
 #[derive(Debug)]
 pub struct RabbitProducer {
@@ -43,19 +81,16 @@ impl RabbitProducer {
             CHANNEL_ACQUIRE_TIMEOUT,
             self.retry_connect(CHANNEL_ACQUIRE_TIMEOUT),
         )
-            .await
-            .unwrap_or_else(|_| {
-                Err(lapin::Error::from(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "timed out waiting for RabbitMQ channel",
-                )))
-            })
+        .await
+        .unwrap_or_else(|_| {
+            Err(lapin::Error::from(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "timed out waiting for RabbitMQ channel",
+            )))
+        })
     }
 
-    async fn retry_connect(
-        &self,
-        deadline: Duration,
-    ) -> Result<Channel, lapin::Error> {
+    async fn retry_connect(&self, deadline: Duration) -> Result<Channel, lapin::Error> {
         const BASE: Duration = Duration::from_millis(500);
         const MAX: Duration = Duration::from_secs(10);
         let mut backoff = BASE;
@@ -120,9 +155,7 @@ impl RabbitProducer {
     fn healthy_channel(&self) -> Option<Channel> {
         let guard = self.channel.load();
         let slot: &Option<Channel> = &**guard;
-        slot.as_ref()
-            .filter(|ch| ch.status().connected())
-            .cloned()
+        slot.as_ref().filter(|ch| ch.status().connected()).cloned()
     }
 
     fn invalidate_channel(&self) {
@@ -168,8 +201,9 @@ impl RabbitProducer {
         T: PublishMessage,
     {
         let (headers, payload) = message.into_parts();
-        let payload_bytes = serde_json::to_vec(&payload)
-            .map_err(|e| lapin::Error::from(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
+        let payload_bytes = serde_json::to_vec(&payload).map_err(|e| {
+            lapin::Error::from(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        })?;
         let props = BasicProperties::default().with_headers(headers);
         let ch = self.get_channel().await?;
 
@@ -284,6 +318,52 @@ impl RabbitProducer {
         }
 
         Ok(())
+    }
+}
+
+impl Publisher for RabbitProducer {
+    fn publish_raw<'a>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        payload: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>> {
+        Box::pin(self.publish_raw(exchange, routing_key, payload))
+    }
+
+    fn publish<'a, T>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        message: T,
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>>
+    where
+        T: PublishMessage + Send + 'a,
+    {
+        Box::pin(self.publish(exchange, routing_key, message))
+    }
+}
+
+impl BatchPublisher for RabbitProducer {
+    fn batch_publish_raw<'a>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        messages: Vec<&'a [u8]>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>> {
+        Box::pin(self.batch_publish_raw(exchange, routing_key, messages))
+    }
+
+    fn batch_publish<'a, T>(
+        &'a self,
+        exchange: &'a str,
+        routing_key: &'a str,
+        messages: Vec<T>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), lapin::Error>> + Send + 'a>>
+    where
+        T: PublishMessage + Send + 'a,
+    {
+        Box::pin(self.batch_publish(exchange, routing_key, messages))
     }
 }
 

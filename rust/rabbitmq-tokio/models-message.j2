@@ -6,7 +6,7 @@ use lapin::types::FieldTable;
 use serde::de::DeserializeOwned;
 
 pub trait PublishMessage {
-    type Payload: Serialize;
+    type Payload: Serialize + Send;
     fn into_parts(self) -> (FieldTable, Self::Payload);
 }
 
