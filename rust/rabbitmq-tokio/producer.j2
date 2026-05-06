@@ -3,11 +3,35 @@ use super::RabbitConnectionManager;
 use super::message::PublishMessage;
 
 use arc_swap::ArcSwap;
+use lapin::types::ShortString;
 use lapin::{BasicProperties, Channel, options::*};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use lapin::types::ShortString;
 use tokio::sync::Mutex;
+
+pub trait Publisher {
+    async fn publish<T>(&self, routing_key: &str, message: T) -> Result<(), lapin::Error>
+    where
+        T: PublishMessage + Send;
+
+    async fn publish_raw(&self, routing_key: &str, payload: &[u8]) -> Result<(), lapin::Error>;
+}
+
+pub trait BatchPublisher {
+    async fn batch_publish<T>(
+        &self,
+        routing_key: &str,
+        messages: Vec<T>,
+    ) -> Result<(), lapin::Error>
+    where
+        T: PublishMessage + Send;
+
+    async fn batch_publish_raw(
+        &self,
+        routing_key: &str,
+        messages: Vec<&[u8]>,
+    ) -> Result<(), lapin::Error>;
+}
 
 #[derive(Debug)]
 pub struct RabbitProducer {
@@ -130,11 +154,7 @@ impl RabbitProducer {
         self.channel.store(empty_channel());
     }
 
-    pub async fn publish_raw(
-        &self,
-        routing_key: &str,
-        payload: &[u8],
-    ) -> Result<(), lapin::Error> {
+    pub async fn publish_raw(&self, routing_key: &str, payload: &[u8]) -> Result<(), lapin::Error> {
         let ch = self.get_channel().await?;
 
         let confirm = ch
@@ -158,11 +178,7 @@ impl RabbitProducer {
         }
     }
 
-    pub async fn publish<T>(
-        &self,
-        routing_key: &str,
-        message: T,
-    ) -> Result<(), lapin::Error>
+    pub async fn publish<T>(&self, routing_key: &str, message: T) -> Result<(), lapin::Error>
     where
         T: PublishMessage,
     {
@@ -282,6 +298,40 @@ impl RabbitProducer {
         }
 
         Ok(())
+    }
+}
+
+impl Publisher for RabbitProducer {
+    async fn publish<T>(&self, routing_key: &str, message: T) -> Result<(), lapin::Error>
+    where
+        T: PublishMessage + Send,
+    {
+        self.publish(routing_key, message).await
+    }
+
+    async fn publish_raw(&self, routing_key: &str, payload: &[u8]) -> Result<(), lapin::Error> {
+        self.publish_raw(routing_key, payload).await
+    }
+}
+
+impl BatchPublisher for RabbitProducer {
+    async fn batch_publish<T>(
+        &self,
+        routing_key: &str,
+        messages: Vec<T>,
+    ) -> Result<(), lapin::Error>
+    where
+        T: PublishMessage + Send,
+    {
+        self.batch_publish(routing_key, messages).await
+    }
+
+    async fn batch_publish_raw(
+        &self,
+        routing_key: &str,
+        messages: Vec<&[u8]>,
+    ) -> Result<(), lapin::Error> {
+        self.batch_publish_raw(routing_key, messages).await
     }
 }
 
