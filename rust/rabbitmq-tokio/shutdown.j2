@@ -1,0 +1,39 @@
+{# type=static,filename=rabbitmq/shutdown.rs,min_version=0.2.0 #}
+use tokio_util::sync::CancellationToken;
+
+#[derive(Clone)]
+pub struct Shutdown {
+    token: CancellationToken,
+}
+
+impl Default for Shutdown {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Shutdown {
+    pub fn new() -> Self {
+        Self {
+            token: CancellationToken::new(),
+        }
+    }
+
+    pub fn child(&self) -> Self {
+        Self {
+            token: self.token.child_token(),
+        }
+    }
+
+    pub fn trigger(&self) {
+        self.token.cancel();
+    }
+
+    pub async fn wait(&self) {
+        self.token.cancelled().await;
+    }
+
+    pub fn is_triggered(&self) -> bool {
+        self.token.is_cancelled()
+    }
+}

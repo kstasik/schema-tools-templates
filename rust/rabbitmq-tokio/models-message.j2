@@ -1,0 +1,37 @@
+{# type=models,filename=rabbitmq/message.rs,min_version=0.2.0 #}
+{% extends "models.j2" %}
+{% block use %}
+use lapin::types::{AMQPValue, LongString, ShortString};
+use lapin::types::FieldTable;
+use serde::de::DeserializeOwned;
+
+pub trait PublishMessage {
+    type Payload: Serialize + Send;
+    fn into_parts(self) -> (FieldTable, Self::Payload);
+}
+
+pub trait Message: Sized {
+    fn message_type() -> &'static str;
+}
+
+pub trait MessageExtractor: Sized {
+    fn message_type() -> &'static str;
+
+    fn extract_payload(headers: &FieldTable, payload: &[u8]) -> Option<Self>;
+
+    fn extract_from_message(msg: &super::consumer::IncomingMessage<'_>) -> Option<Self> {
+        Self::extract_payload(msg.headers, msg.data)
+    }
+}
+
+{% endblock use %}
+
+{% block end %}
+
+fn generate_time_string() -> String {
+    let now = std::time::SystemTime::now();
+    let now: DateTime<Utc> = now.into();
+
+    now.to_rfc3339()
+}
+{% endblock end %}
