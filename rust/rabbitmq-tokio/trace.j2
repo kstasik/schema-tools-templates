@@ -1,0 +1,95 @@
+{# type=static,filename=rabbitmq/trace.rs,min_version=0.2.0 #}
+{% set_global apm_prefix = options.apmPrefix | default(value = "") %}
+use lapin::types::{AMQPValue, FieldTable, LongString, ShortString};
+use std::sync::OnceLock;
+{%- if apm_prefix != "" %}
+use {{ apm_prefix }}tracing;
+{%- endif %}
+use {{ apm_prefix }}opentelemetry::propagation::{Extractor, Injector, TextMapPropagator};
+use {{ apm_prefix }}opentelemetry_sdk::propagation::TraceContextPropagator;
+use {{ apm_prefix }}tracing::Span;
+use {{ apm_prefix }}tracing_opentelemetry::OpenTelemetrySpanExt;
+
+static TRACE_PROPAGATOR: OnceLock<TraceContextPropagator> = OnceLock::new();
+
+static KEY_TRACEPARENT: OnceLock<ShortString> = OnceLock::new();
+static KEY_TRACESTATE: OnceLock<ShortString> = OnceLock::new();
+
+static TRACE_KEYS: &[&str] = &["traceparent", "tracestate"];
+
+#[inline]
+fn key_traceparent() -> &'static ShortString {
+    KEY_TRACEPARENT.get_or_init(|| ShortString::from("traceparent"))
+}
+
+#[inline]
+fn key_tracestate() -> &'static ShortString {
+    KEY_TRACESTATE.get_or_init(|| ShortString::from("tracestate"))
+}
+
+pub fn get_trace_propagator() -> &'static TraceContextPropagator {
+    TRACE_PROPAGATOR.get_or_init(TraceContextPropagator::new)
+}
+
+pub struct HeaderInjector<'a>(pub &'a mut FieldTable);
+
+impl<'a> Injector for HeaderInjector<'a> {
+    fn set(&mut self, key: &str, value: String) {
+        let short_key = match key {
+            "traceparent" => key_traceparent().clone(),
+            "tracestate" => key_tracestate().clone(),
+            other => ShortString::from(other),
+        };
+
+        self.0
+            .insert(short_key, AMQPValue::LongString(LongString::from(value)));
+    }
+}
+
+pub struct TraceHeaders<'a> {
+    pub headers: &'a FieldTable,
+}
+
+impl<'a> Extractor for TraceHeaders<'a> {
+    fn get(&self, key: &str) -> Option<&str> {
+        let short_key = match key {
+            "traceparent" => key_traceparent(),
+            "tracestate" => key_tracestate(),
+            other => return self.lookup_dynamic(other),
+        };
+
+        self.headers.inner().get(short_key).and_then(|v| match v {
+            AMQPValue::LongString(s) => std::str::from_utf8(s.as_bytes()).ok(),
+            _ => None,
+        })
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        TRACE_KEYS.to_vec()
+    }
+}
+
+impl<'a> TraceHeaders<'a> {
+    /// Dynamic lookup for unknown keys — constructs a ShortString only when
+    /// the fast-path match above doesn't cover the key.
+    #[cold]
+    fn lookup_dynamic(&self, key: &str) -> Option<&str> {
+        self.headers
+            .inner()
+            .get(&ShortString::from(key))
+            .and_then(|v| match v {
+                AMQPValue::LongString(s) => std::str::from_utf8(s.as_bytes()).ok(),
+                _ => None,
+            })
+    }
+}
+
+pub fn add_trace_headers(headers: &mut FieldTable, span: &Span) {
+    get_trace_propagator().inject_context(&span.context(), &mut HeaderInjector(headers));
+}
+
+pub fn extract_trace_context(
+    headers: &FieldTable,
+) -> {{ apm_prefix }}opentelemetry::Context {
+    get_trace_propagator().extract(&TraceHeaders { headers })
+}

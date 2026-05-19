@@ -1,0 +1,40 @@
+{# type=static,filename=rabbitmq/mod.rs,min_version=0.2.0 #}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
+{% set_global apm = options.apm | default(value = []) %}
+
+use lapin::types::FieldTable;
+use serde::Serialize;
+
+{% if "opentelemetry" in apm %}
+const SPAN_STATUS_ERROR: &str = "error";
+const SPAN_STATUS_OK: &str = "ok";
+{% endif %}
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod message;
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod config;
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod connection;
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod consumer;
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod producer;
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod shutdown;
+#[rustfmt::skip]
+#[allow(dead_code, unused_imports)]
+pub mod trace;
+
+pub use config::RabbitConfiguration;
+pub use connection::RabbitConnectionManager;
+pub use consumer::{IncomingMessage, Confirmation, Handler, MessageHandler, RabbitConsumer};
+pub use producer::RabbitProducer;
+pub use shutdown::Shutdown;
+pub use message::{Message, MessageExtractor, PublishMessage};

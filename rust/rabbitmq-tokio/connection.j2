@@ -1,0 +1,88 @@
+{# type=static,filename=rabbitmq/connection.rs,min_version=0.2.0 #}
+use arc_swap::ArcSwap;
+use lapin::{Connection, ConnectionProperties};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+
+use super::RabbitConfiguration;
+
+type Slot = Option<Arc<Connection>>;
+
+#[derive(Debug)]
+pub struct RabbitConnectionManager {
+    connection_name: Arc<str>,
+    uri: Arc<str>,
+    current: ArcSwap<Slot>,
+    reconnect_gate: Mutex<Option<Instant>>,
+}
+
+impl RabbitConnectionManager {
+    pub fn new(config: RabbitConfiguration) -> Self {
+        Self {
+            connection_name: Arc::from(config.connection_name.as_str()),
+            uri: Arc::from(config.uri.as_str()),
+            current: ArcSwap::from_pointee(None),
+            reconnect_gate: Mutex::new(None),
+        }
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.get_if_ready().is_some()
+    }
+
+    pub fn invalidate(&self) {
+        self.current.store(Arc::new(None));
+    }
+
+    pub async fn get(&self) -> Result<Arc<Connection>, lapin::Error> {
+        if let Some(conn) = self.get_if_ready() {
+            return Ok(conn);
+        }
+
+        let mut last_attempt = self.reconnect_gate.lock().await;
+
+        // Other worker may have connected while this waited for gate
+        if let Some(conn) = self.get_if_ready() {
+            return Ok(conn);
+        }
+
+        if let Some(ts) = *last_attempt {
+            let cooldown = Duration::from_millis(500);
+            let elapsed = ts.elapsed();
+            if elapsed < cooldown {
+                drop(last_attempt);
+                tokio::time::sleep(cooldown - elapsed).await;
+                if let Some(conn) = self.get_if_ready() {
+                    return Ok(conn);
+                }
+                last_attempt = self.reconnect_gate.lock().await;
+            }
+        }
+
+        *last_attempt = Some(Instant::now());
+
+        let conn = Connection::connect(
+            &self.uri,
+            ConnectionProperties::default()
+                .with_connection_name((*self.connection_name).into()),
+        )
+            .await?;
+
+        let conn = Arc::new(conn);
+
+        self.current.store(Arc::new(Some(conn.clone())));
+
+        drop(last_attempt);
+
+        Ok(conn)
+    }
+
+    fn get_if_ready(&self) -> Option<Arc<Connection>> {
+        let guard = self.current.load();
+        let slot: &Slot = &**guard;
+        slot.as_ref()
+            .filter(|c| c.status().connected())
+            .cloned()
+    }
+}
