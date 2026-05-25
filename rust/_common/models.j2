@@ -58,8 +58,8 @@ impl {{ m::model_name(name = model.object.name) }} {
 {{ e::model_object_impl(model = model, options = options) }}
 
 {%- elif model.enum %}
-#[derive({%- if model.enum.type == "number" %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone{% if not options.skipValidate %}, Validate{% endif %})]
-{%- if model.enum.type == "number" %}
+#[derive({%- if model.enum.type in ["number", "integer"] %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone{% if not options.skipValidate %}, Validate{% endif %})]
+{%- if model.enum.type in ["number", "integer"] %}
 #[repr(u32)]
 {%- endif %}
 pub enum {{ m::model_name(name = model.enum.name) }}Variant {
@@ -70,7 +70,7 @@ pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {{ m::enum_variant(name = a, base = m::model_name(name = a) ) }},
     {% elif option == option | when_numeric(prefix="n") | pascalcase -%}
     {{ option }},
-    {% elif model.enum.type == "number" -%}
+    {% elif model.enum.type in ["number", "integer"] -%}
     {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }} = {{ option }},
     {% elif option is matching("^[\d]+") -%}
     #[serde(rename = "{{ option }}")]
@@ -92,7 +92,7 @@ impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
             {{- m::enum_variant(name = a, base = m::model_name(name = a) ) -}}
             {%- elif option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
-            {%- elif model.enum.type == "number" -%}
+            {%- elif model.enum.type in ["number", "integer"] -%}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
             {%- elif option is matching("^[\d]+") -%}
             {% set a = 'Code' ~ option %}
@@ -122,7 +122,7 @@ impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
             {{- m::enum_variant(name = a, base = m::model_name(name = a) ) }}
             {%- elif option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
-            {%- elif model.enum.type == "number" -%}
+            {%- elif model.enum.type in ["number", "integer"] -%}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
             {%- elif option is matching("^[\d]+") -%}
             {% set a = 'Code' ~ option %}
