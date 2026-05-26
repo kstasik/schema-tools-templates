@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::collections::BTreeMap;
 {% if not options.skipValidate %}use garde::Validate;
 use regex::Regex;
-use once_cell::sync::Lazy;{% endif %}
+use std::sync::LazyLock;{% endif %}
 {% block use %}{% endblock use %}
 
 {% if formats is containing("decimal") %}
@@ -18,11 +18,11 @@ use chrono::{DateTime, Utc};
 {% endif %}
 
 {% if not options.skipValidate %}
-pub static UUID: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap() });
-pub static FLOAT: Lazy<Regex> = Lazy::new(|| { Regex::new(r"^[0-9\.]+$").unwrap() });
+pub static UUID: LazyLock<Regex> = LazyLock::new(|| { Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap() });
+pub static FLOAT: LazyLock<Regex> = LazyLock::new(|| { Regex::new(r"^[0-9\.]+$").unwrap() });
 {% for regexp in regexps -%}
-pub static {{ regexp.name | snakecase | upper }}: Lazy<Regex> = Lazy::new(|| { Regex::new(r"{{ regexp.pattern }}").unwrap() });
-{%- endfor %}
+pub static {{ regexp.name | snakecase | upper }}: LazyLock<Regex> = LazyLock::new(|| { Regex::new(r"{{ regexp.pattern }}").unwrap() });
+{% endfor -%}
 {% endif %}
 
 {% for model in models %}
