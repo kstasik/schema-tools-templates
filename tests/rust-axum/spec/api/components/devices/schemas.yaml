@@ -47,3 +47,36 @@ Device:
     limitedText:
       type: string
       minLength: 10
+    nullableTests:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - 'test'
+            - 'test[]'
+        withextras:
+          type: object
+          required: ['test1']
+          properties:
+            test1:
+              type: string
+          additionalProperties: {}
+        subid:
+          type: ["integer", "null"]
+        subsubid:
+          $ref: '#/DeviceSubSubId'
+        subidnext:
+          oneOf:
+            - type: "null"
+            - type: "string"
+        subset:
+          oneOf:
+            - type: "null"
+            - $ref: '#/DeviceSubset'
+
+DeviceSubSubId:
+  type: ["integer", "null"]
+
+DeviceSubset:
+  type: ["null", "string"]

@@ -113,7 +113,12 @@ pub struct {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }
 {% for response in endpoint.responses.all %}
 {% set filtered_response_headers = response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) %}
 {% if filtered_response_headers | length > 0 %}
-{% if not response.models.default.model.model %}
+{% if not response.models.default.model.model and response.models.default.model %}
+pub struct {{ response.models.default.model.name }}WithHeaders {
+    pub body: Body,
+    pub headers: {{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers
+}
+{% elif not response.models.default.model.model %}
 {% elif froms_with_headers is not containing(response.models.default.model.model.name) %}
 pub struct {{ m::type(property = response.models.default.model, ns = "") }}WithHeaders {
     pub body: {{ m::type(property = response.models.default.model, ns = "super::model") }},
@@ -132,6 +137,8 @@ pub enum {{ endpoint.operation | pascalcase }}Response {
     Status{{ response.statusCode }}{% if filtered_response_headers | length > 0 %}({{ endpoint.operation | pascalcase }}Response{{ response.statusCode }}Headers){% endif %},
     {%- elif response.models.multipleContentTypes %}
     Status{{ response.statusCode }}({{ endpoint.operation | pascalcase }}MixedResponse{{ response.statusCode }}),
+    {%- elif not response.models.default.model.model and response.models.default.model and filtered_response_headers | length > 0 -%}
+	Status{{ response.statusCode }}({{ response.models.default.model.name }}WithHeaders),
     {%- else -%}
 	Status{{ response.statusCode }}({% if filtered_response_headers | length == 0 %}{{ m::type(property = response.models.default.model, ns = "super::model") }}{% else %}{{ m::type(property = response.models.default.model, ns = "") }}WithHeaders{% endif %}),
     {%- endif -%}
@@ -194,7 +201,7 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
                     (model) =>
                     {% if filtered_response_headers | length > 0 %}
                     {
-                        let mut response = {{ e::into_response(response = response, name = "model.body") }};
+                        let mut response = {{ e::into_response(response = response, name = "model.body", headers = filtered_response_headers) }};
                         let headers = response.headers_mut();
 
                         {% if filtered_response_headers | filter(attribute="required", value=true) | length > 0 %}
@@ -205,14 +212,14 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
 
                         {% for param in filtered_response_headers | filter(attribute="required", value=false)  %}
                         if let Some(header) = model.headers.{{ m::property_name(name = param.name) }} {
-                            headers.insert("{{ param.name | lower }}", HeaderValue::from_str(&header).unwrap());
+                            headers.insert("{{ param.name | lower }}", {{ e::into_header_value(parameter = param, variable = "header") }});
                         }
                         {% endfor %}
 
                         response
                     }
                     {% else %}
-                    {{ e::into_response(response = response, name = "model") }}
+                    {{ e::into_response(response = response, name = "model", headers = filtered_response_headers) }}
                     {% endif %}
                 {% endif %}
                 {%- elif filtered_response_headers | length > 0 %}(h) => {
@@ -227,7 +234,7 @@ impl From<{{ endpoint.operation | pascalcase }}Response> for Response<Body> {
 
                     {% for param in filtered_response_headers | filter(attribute="required", value=false)  %}
                     if let Some(header) = h.{{ m::property_name(name = param.name) }} {
-                        headers.insert("{{ param.name | lower }}", HeaderValue::from_str(&header).unwrap());
+                        headers.insert("{{ param.name | lower }}", {{ e::into_header_value(parameter = param, variable = "header") }});
                     }
                     {% endfor %}
 

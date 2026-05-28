@@ -12,8 +12,10 @@ log::{{ type }}!
 traceparent tracestate
 {% endfilter %}{%- endmacro skipped_headers %}
 
-{% macro into_response(response, name) -%}
-{%- if response.models.default.model.type == "string" %}
+{% macro into_response(response, name, headers=false) -%}
+{%- if not response.models.default.model.model and response.models.default.model and headers | length > 0 -%}
+model.body.into_response()
+{%- elif response.models.default.model.type == "string" %}
 model.into_response()
 {%- else %}
 (StatusCode::from_u16({{ response.statusCode }}).unwrap(), Json({{ name }})).into_response()
@@ -89,3 +91,16 @@ model.into_response()
 {%- if endpoint.requestbody.models.default -%}, body.0{%- endif -%}
 {%- if filtered_headers | length > 0 -%}, headers{%- endif -%}
 {%- endmacro handler_definition_parameters %}
+
+{% macro into_header_value(parameter, variable) -%}
+{%- if parameter.model.type == "string" and parameter.model.validation.format == "uuid" -%}
+HeaderValue::from_str(&{{ variable }}.to_string()).unwrap()
+{%- elif parameter.model.type == "string" -%}
+HeaderValue::from_str(&{{ variable }}).unwrap()
+{%- elif parameter.model.type == "integer" -%}
+HeaderValue::from({{ variable }})
+{%- else -%}
+HeaderValue::from_str(&{{ variable }}).unwrap()
+{%- endif -%}
+{%- endmacro endpoint_parameters %}
+

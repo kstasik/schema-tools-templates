@@ -23,6 +23,10 @@ components:
       $ref: types.yaml#/Pagination
     ServiceStatus:
       $ref: components/schemas.yaml#/ServiceStatus
+    DeviceSubSubId:
+      $ref: components/devices/schemas.yaml#/DeviceSubSubId
+    DeviceSubset:
+      $ref: components/devices/schemas.yaml#/DeviceSubset
     Device:
       $ref: components/devices/schemas.yaml#/Device
     Accessory:
@@ -211,6 +215,19 @@ paths:
         - $ref: '#/components/parameters/traceStateHeader'
       requestBody:
         $ref: '#/components/requestBodies/createDevice'
+
+    options:
+      tags:
+        - devices
+      description: Get devices options
+      operationId: getDevices
+      responses:
+        200:
+          description: Get devices options
+          content:
+            text/plain:
+              schema:
+                type: string
  
   /v1/devices/{deviceId}:
     get:
@@ -225,6 +242,41 @@ paths:
           $ref: '#/components/responses/getDevice400'
         403:
           $ref: '#/components/responses/forbidden403'
+        500:
+          $ref: '#/components/responses/internalServerError500'
+      parameters:
+        - $ref: '#/components/parameters/traceParentHeader'
+        - $ref: '#/components/parameters/traceStateHeader'
+        - $ref: '#/components/parameters/deviceIdPath'
+
+  /v1/devices/{deviceId}/data:
+    get:
+      tags:
+        - devices
+      description: Get device data
+      operationId: getDeviceData
+      responses:
+        200:
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+          headers:
+            CONTENT-TYPE:
+              required: true
+              schema:
+                type: string
+        400:
+          content:
+            application/text:
+              schema:
+                type: string
+          headers:
+            CONTENT-TYPE:
+              required: true
+              schema:
+                type: string
         500:
           $ref: '#/components/responses/internalServerError500'
       parameters:

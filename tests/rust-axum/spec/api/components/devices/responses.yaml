@@ -90,6 +90,14 @@ getDevice200:
     tracestate:
       schema:
         $ref: ../../types.yaml#/TraceState
+    custom-header-int:
+      schema:
+        type: integer
+        format: int64
+    custom-header-uuid:
+      schema:
+        type: string 
+        format: uuid 
   content:
     application/json:
       schema:
