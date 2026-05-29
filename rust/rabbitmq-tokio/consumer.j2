@@ -248,6 +248,7 @@ async fn setup_channel(
         }
     };
 
+    tracing::info!(worker = id, queue = queue.as_ref(), "Connection established");
     *backoff = Duration::from_millis(500);
     Some(WorkerChannel { conn, stream })
 }
