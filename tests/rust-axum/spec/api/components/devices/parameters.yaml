@@ -62,7 +62,7 @@ listDevicesForQuery:
 deviceSecretIdHeader:
   in: header
   name: secret-id 
-  requred: true
+  required: true
   schema:
     type: string
     format: uuid
