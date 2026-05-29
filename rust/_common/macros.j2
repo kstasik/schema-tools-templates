@@ -1,6 +1,5 @@
 {% macro property_name(name) %}{% filter nospaces %}
     {{ name | replace(from="-", to="") | when_numeric(prefix="n") | snakecase }}
-
     {% if name | snakecase in [
         "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
         "mut", "pub", "ref", "return", "self", "static", "struct", "super", "trait",
@@ -45,7 +44,9 @@
 {% else %}
 {% set real_name = "self." | concat(with=self::property_name(name = q.name)) -%}
 {% endif %}
-{% if q.type == "enum" %}
+{% if q.type == "string" and q.validation and q.validation.format == "uuid" %}
+    {{ real_name }}.to_string().as_ref()
+{% elif q.type == "enum" %}
     {{ real_name }}.to_string().as_ref()
 {% elif q.type == "string" %}
     {{ real_name }}.as_ref()
@@ -87,7 +88,9 @@
 
 {% macro model_validation(model, options, is_required=true, regex_path="", style="") %}{% filter nospaces %}
     {% if not options.skipValidate %}
-        {% if model.validation and model.type != 'enum' %}
+        {% if model == 'none' %}
+        #[garde(skip)]
+        {% elif model.validation and model.type != 'enum' %}
             {% if self::get_validation(validation = model.validation, form = style == "form", type = model.type) | length %}
                 #[garde(
                     {% if not is_required -%}inner({%- endif -%}
@@ -197,6 +200,8 @@
             {{ self::endpoint_model_response(success = success, headers = headers) }}
         {% elif success.model and success.model.type == "wrapper" and success.model.model and success.model.model.type %}
             {{ self::endpoint_model_response(success = success, headers = headers) }}
+        {% elif success.model.validation and success.model.validation.format == "binary" %}
+            {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
         {% elif success.contentType and (success.contentType == "text/html" or (success.model and success.model.type == "string")) %}
             String
         {% else %}

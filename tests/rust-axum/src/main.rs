@@ -78,6 +78,7 @@ mod handler {
                     None,
                     None,
                     None,
+                    None,
                 )],
             });
         }
@@ -109,6 +110,7 @@ mod handler {
                     None,
                     None,
                     None,
+                    None,
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
@@ -121,6 +123,7 @@ mod handler {
                     "138f5d31-4feb-4765-88ad-989dff706b53".to_string(),
                     api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
                     uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                    None,
                     None,
                     None,
                     None,
@@ -157,20 +160,29 @@ mod handler {
             );
         }
 
-        api::endpoint::DeviceGetV1Response::Status200(api::model::GetDevice200Response {
-            data: api::model::Device::new(
-                "test".to_string(),
-                api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
-                uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ),
-        })
+        api::endpoint::DeviceGetV1Response::Status200(
+            api::endpoint::GetDevice200ResponseWithHeaders {
+                body: api::model::GetDevice200Response {
+                    data: api::model::Device::new(
+                        "test".to_string(),
+                        api::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10,
+                        uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ),
+                },
+                headers: api::endpoint::DeviceGetV1Response200Headers {
+                    customheaderint: Some(123),
+                    customheaderuuid: Some(uuid!("67e55044-10b1-426f-9247-bb680e5fe0c8")),
+                },
+            },
+        )
     }
 
     pub async fn location_get_v1(
@@ -615,6 +627,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None
             ))
             .await;
 
@@ -659,6 +672,7 @@ mod tests {
                 None,
                 None,
                 Some("e".to_string()),
+                None
             ))
             .await;
 
@@ -741,14 +755,14 @@ mod tests {
         let client = super::client::devices::DevicesClient::new(uri, reqwest::Client::new());
 
         let result = client.device_get_v1("existing".to_string()).await;
-        let device = result.unwrap();
+        let (response, _headers) = result.unwrap();
 
         assert!(matches!(
-            device.data.device_class_type,
+            response.data.device_class_type,
             client::devices::model::DeviceDeviceClassTypeVariant::DeviceDeviceClassType10
         ));
 
-        let serialized = serde_json::to_string(&device.data.device_class_type).unwrap();
+        let serialized = serde_json::to_string(&response.data.device_class_type).unwrap();
         assert_eq!("10", serialized);
     }
 
@@ -772,6 +786,7 @@ mod tests {
                 features: None,
                 custom: None,
                 limited_text: None,
+                nullable_tests: None
             }
         ).await;
 
@@ -801,6 +816,7 @@ mod tests {
                 features: None,
                 custom: None,
                 limited_text: None,
+                nullable_tests: None
             }
         ).await;
 
@@ -831,6 +847,7 @@ mod tests {
                 features: None,
                 custom: Some(Coordinates(0.5f64, 0.8f64)),
                 limited_text: None,
+                nullable_tests: None
             }
         ).await;
 
@@ -861,6 +878,7 @@ mod tests {
                 features: Some(vec!["usb".to_string()]),
                 custom: None,
                 limited_text: None,
+                nullable_tests: None
             }
         ).await;
 

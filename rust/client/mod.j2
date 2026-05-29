@@ -11,6 +11,7 @@
 
 use std::collections::HashMap;
 use reqwest::header::{HeaderName, HeaderValue};
+use reqwest::Method;
 use super::error::{ApiError, ApiResponseError, ClientError, ResponseProcessingError};
 use std::collections::BTreeMap;
 {% if "tracing" in apm %}
@@ -87,7 +88,7 @@ impl {{ options.name }} {
         );
         {% endif %}
         
-        let request = self.client.{{ endpoint.method }}(&format!("{}{{ endpoint.path | path_parts(to="{}") }}", self.uri
+        let request = self.client.request(Method::{{ endpoint.method | upper }}, &format!("{}{{ endpoint.path | path_parts(to="{}") }}", self.uri
                 {%- for q in endpoint.parameters.path %}
             , {{ m::to_string(q = q.model, required = true, name = m::property_name(name = q.name) ) }}
             {% endfor -%}

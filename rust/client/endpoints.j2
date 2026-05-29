@@ -93,7 +93,9 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 		vec![
 			{%- for q in filtered_headers %}
 			{% if q.required %}
-			Some((HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_bytes(self.{{ m::property_name(name = q.name) }}.as_ref()).unwrap())),
+            {% set propertyName = m::property_name(name = q.name) %}
+            {% set fullPropertyName = "self." ~ propertyName %}
+            Some((HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_str({{ m::to_str(q = q.model, required = q.required, name = fullPropertyName) }}).unwrap())),
 			{% else %}
 			self.{{ m::property_name(name = q.name) }}.map(|v| (HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_str({{ m::to_str(q = q.model, required = q.required, name = 'v') }}).unwrap())),
 			{% endif %}

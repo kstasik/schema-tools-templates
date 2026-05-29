@@ -17,6 +17,8 @@ use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
 {% endif %}
 
+{% set additionalPropertiesModels = options.additionalPropertiesModels | default(value = []) %}
+
 {% if not options.skipValidate %}
 pub static UUID: LazyLock<Regex> = LazyLock::new(|| { Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap() });
 pub static FLOAT: LazyLock<Regex> = LazyLock::new(|| { Regex::new(r"^[0-9\.]+$").unwrap() });
@@ -28,21 +30,31 @@ pub static {{ regexp.name | snakecase | upper }}: LazyLock<Regex> = LazyLock::ne
 {% for model in models %}
 {%- if model.object %}
 #[derive(Deserialize, Serialize, Debug,{% if not options.skipValidate %} Validate,{% endif %} Clone{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
-pub struct {{ m::model_name(name = model.object.name) }} {
+{% set modelName = m::model_name(name = model.object.name) %}
+pub struct {{ modelName }} {
     {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") %}
     {% for property in filtered_properties -%}
     {{ m::model_validation(model = property, options = options) }}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
     pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
     {%- endfor %}
+
+    {%- if model.object.additional and (options.additionalProperties or modelName in additionalPropertiesModels) %}
+    {{ m::model_validation(model = "none", options = options) }}
+    #[serde(flatten)]
+    pub additional_properties: std::collections::HashMap<String, serde_json::Value>,
+    {%- endif %}
 }
 {# if sort required first #}
 impl {{ m::model_name(name = model.object.name) }} {
-    pub fn new({%- for property in filtered_properties -%}{{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %}, {% endfor -%}) -> Self {
+    pub fn new({%- for property in filtered_properties -%}{{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %}, {% endfor -%}{%- if model.object.additional and (options.additionalProperties or modelName in additionalPropertiesModels) %} additional_properties: std::collections::HashMap<String, serde_json::Value>{%- endif %}) -> Self {
         Self {
             {% for property in filtered_properties -%}
             {{ m::property_name(name = property.name) }},
             {%- endfor %}
+            {%- if model.object.additional and (options.additionalProperties or modelName in additionalPropertiesModels) %}
+            additional_properties,
+            {%- endif %}
         }
     }
     {%- for property in model.object.properties | filter(attribute="type", value="const") -%}
@@ -78,9 +90,13 @@ pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {{ m::enum_variant(name = a, base = m::model_name(name = a)) }},
     {% else -%}
     #[serde(rename = "{{ option }}")]
-    {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }},
+    {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) %}
+    {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }},
+
     {% endif -%}
     {%- endfor %}
+
+    {{ clear_bucket(bucket="enum") }}
 }
 
 impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
@@ -98,9 +114,12 @@ impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
             {% set a = 'Code' ~ option %}
             {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
             {%- else -%}
-            {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
+            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) %}
+            {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }}
             {%- endif %} => "{{ option }}",
             {%- endfor %}
+
+            {{ clear_bucket(bucket="enum") }}
         }
     }
 }
@@ -128,10 +147,13 @@ impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
             {% set a = 'Code' ~ option %}
             {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
             {%- else -%}
-            {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) }}
+            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) %}
+            {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }}
             {%- endif %}),
             {%- endfor %}
             _ => Err(format!("Unknown variant: {}", s))
+
+            {{ clear_bucket(bucket="enum") }}
         }
     }
 }
