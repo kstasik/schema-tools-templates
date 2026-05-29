@@ -44,7 +44,9 @@
 {% else %}
 {% set real_name = "self." | concat(with=self::property_name(name = q.name)) -%}
 {% endif %}
-{% if q.type == "enum" %}
+{% if q.type == "string" and q.validation.format == "uuid" %}
+    {{ real_name }}.to_string().as_ref()
+{% elif q.type == "enum" %}
     {{ real_name }}.to_string().as_ref()
 {% elif q.type == "string" %}
     {{ real_name }}.as_ref()

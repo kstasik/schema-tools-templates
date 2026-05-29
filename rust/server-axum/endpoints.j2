@@ -87,7 +87,13 @@ impl std::convert::TryFrom<&axum::http::HeaderMap> for {{ endpoint.operation | p
                 .map(|hv| hv.to_str())
                 .map_or(Ok(None), |v| v.map(Some))
                 .map_err(|_| StatusCode::BAD_REQUEST)?
+                {% if param.model and param.model.type == "string" and param.model.validation and param.model.validation.format == "uuid" %}
+                .map(|s| uuid::Uuid::parse_str(s))
+                .map_or(Ok(None), |v| v.map(Some))
+                .map_err(|_| StatusCode::BAD_REQUEST)?
+                {% else %}
                 .map(|s| s.to_string())
+                {% endif %}
                 {% if param.required %}.ok_or(StatusCode::BAD_REQUEST)?{% endif %},
             {% endfor %}
         })

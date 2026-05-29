@@ -58,3 +58,18 @@ listDevicesForQuery:
   required: false
   schema:
     type: string
+
+deviceSecretIdHeader:
+  in: header
+  name: secret-id 
+  requred: true
+  schema:
+    type: string
+    format: uuid
+
+deviceSuperSecretIdHeader: # optional uuid
+  in: header
+  name: super-secret-id 
+  schema:
+    type: string
+    format: uuid

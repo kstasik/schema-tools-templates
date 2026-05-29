@@ -138,6 +138,10 @@ components:
       $ref: components/accessories/parameters.yaml#/accessoryIdPath
     locationIdPath:
       $ref: components/locations/parameters.yaml#/locationIdPath
+    deviceSecretIdHeader:
+      $ref: components/devices/parameters.yaml#/deviceSecretIdHeader
+    deviceSuperSecretIdHeader:
+      $ref: components/devices/parameters.yaml#/deviceSuperSecretIdHeader
 
   securitySchemes:
     basicAuth:
@@ -221,6 +225,9 @@ paths:
         - devices
       description: Get devices options
       operationId: getDevices
+      parameters:
+        - $ref: '#/components/parameters/deviceSecretIdHeader'
+        - $ref: '#/components/parameters/deviceSuperSecretIdHeader'
       responses:
         200:
           description: Get devices options
