@@ -286,7 +286,7 @@ async fn consume_loop<D: Clone + Send + Sync + 'static>(
                     break LoopExit::StreamError;
                 }
                 None => {
-                    tracing::warn!(worker = id, "Stream closed");
+                    tracing::error!(worker = id, "Stream closed unexpectedly");
                     break LoopExit::StreamClosed;
                 }
             }
