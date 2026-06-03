@@ -220,19 +220,23 @@ paths:
       requestBody:
         $ref: '#/components/requestBodies/createDevice'
 
-    options:
+    head:
       tags:
         - devices
-      description: Get devices options
+      description: Get devices head 
       operationId: getDevices
       parameters:
         - $ref: '#/components/parameters/deviceSecretIdHeader'
         - $ref: '#/components/parameters/deviceSuperSecretIdHeader'
       responses:
         200:
-          description: Get devices options
           content:
-            text/plain:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            CONTENT-TYPE:
               schema:
                 type: string
  

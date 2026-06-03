@@ -93,7 +93,7 @@ model.into_response()
 {%- endmacro handler_definition_parameters %}
 
 {% macro into_header_value(parameter, variable) -%}
-{%- if parameter.model.type == "string" and parameter.model.validation.format == "uuid" -%}
+{%- if parameter.model.type == "string" and parameter.model.validation and parameter.model.validation.format == "uuid" -%}
 HeaderValue::from_str(&{{ variable }}.to_string()).unwrap()
 {%- elif parameter.model.type == "string" -%}
 HeaderValue::from_str(&{{ variable }}).unwrap()

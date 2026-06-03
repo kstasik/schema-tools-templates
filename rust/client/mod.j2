@@ -201,7 +201,7 @@ impl {{ options.name }} {
                 .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
                 {% if success_headers | length > 0 %}.map(|d| (d, headers)){% endif %}
             {% else %}
-                {% if success.contentType and (success.contentType == "text/html" or success.contentType == "text/plain" or success.contentType == "application/octet-stream") %}
+                {% if success.contentType and (success.contentType == "text/html" or success.contentType == "text/plain") %}
                     return response
                         .text()
                         .await
