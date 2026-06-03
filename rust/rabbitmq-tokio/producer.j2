@@ -5,9 +5,11 @@ use super::message::PublishMessage;
 use arc_swap::ArcSwap;
 use lapin::types::ShortString;
 use lapin::{BasicProperties, Channel, options::*};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 use tokio::sync::Mutex;
+use serde_json::Value;
+use std::collections::VecDeque;
 
 pub trait Publisher {
     async fn publish<T>(&self, routing_key: &str, message: T) -> Result<(), lapin::Error>
@@ -314,6 +316,19 @@ impl Publisher for RabbitProducer {
     }
 }
 
+impl<T: Publisher> Publisher for Arc<T> {
+    async fn publish<M>(&self, routing_key: &str, message: M) -> Result<(), lapin::Error>
+    where
+        M: PublishMessage + Send,
+    {
+        (**self).publish(routing_key, message).await
+    }
+
+    async fn publish_raw(&self, routing_key: &str, payload: &[u8]) -> Result<(), lapin::Error> {
+        (**self).publish_raw(routing_key, payload).await
+    }
+}
+
 impl BatchPublisher for RabbitProducer {
     async fn batch_publish<T>(
         &self,
@@ -338,4 +353,81 @@ impl BatchPublisher for RabbitProducer {
 fn empty_channel() -> Arc<Option<Channel>> {
     static EMPTY: OnceLock<Arc<Option<Channel>>> = OnceLock::new();
     EMPTY.get_or_init(|| Arc::new(None)).clone()
+}
+
+#[derive(Debug, Clone)]
+pub struct SentMessage {
+    pub routing_key: String,
+    pub payload: Value,
+}
+
+#[derive(Clone)]
+pub struct MockProducer {
+    sent_messages: Arc<RwLock<VecDeque<SentMessage>>>,
+}
+
+impl Default for MockProducer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MockProducer {
+    pub fn new() -> Self {
+        Self {
+            sent_messages: Arc::new(RwLock::new(VecDeque::with_capacity(16))),
+        }
+    }
+
+    pub fn get_sent_messages(&self) -> Vec<SentMessage> {
+        self.sent_messages.read().unwrap().iter().cloned().collect()
+    }
+
+    pub fn find_sent_messages(&self, routing_key: &str) -> Option<SentMessage> {
+        self.sent_messages
+            .read()
+            .unwrap()
+            .iter()
+            .find(|m| m.routing_key == routing_key)
+            .cloned()
+    }
+
+    pub fn clear_messages(&self) {
+        self.sent_messages.write().unwrap().clear();
+    }
+
+    pub fn get_message_count(&self) -> usize {
+        self.sent_messages.read().unwrap().len()
+    }
+
+    pub fn get_last_message(&self) -> Option<SentMessage> {
+        self.sent_messages.read().unwrap().back().cloned()
+    }
+}
+
+impl Publisher for MockProducer {
+    async fn publish<T>(&self, routing_key: &str, message: T) -> Result<(), lapin::Error>
+    where
+        T: PublishMessage + Send,
+    {
+        let (_meta, payload) = message.into_parts();
+
+        let sent_message = SentMessage {
+            routing_key: routing_key.to_string(),
+            payload: serde_json::to_value(payload).unwrap_or(Value::Null),
+        };
+
+        self.sent_messages.write().unwrap().push_back(sent_message);
+        Ok(())
+    }
+
+    async fn publish_raw(&self, routing_key: &str, payload: &[u8]) -> Result<(), lapin::Error> {
+        let sent_message = SentMessage {
+            routing_key: routing_key.to_string(),
+            payload: serde_json::from_slice(payload).unwrap_or(Value::Null),
+        };
+
+        self.sent_messages.write().unwrap().push_back(sent_message);
+        Ok(())
+    }
 }
