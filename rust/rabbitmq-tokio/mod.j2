@@ -35,6 +35,6 @@ pub mod trace;
 pub use config::RabbitConfiguration;
 pub use connection::RabbitConnectionManager;
 pub use consumer::{IncomingMessage, Confirmation, Handler, MessageHandler, RabbitConsumer};
-pub use producer::RabbitProducer;
+pub use producer::{MockProducer, Publisher, RabbitProducer, SentMessage};
 pub use shutdown::Shutdown;
 pub use message::{Message, MessageExtractor, PublishMessage};
