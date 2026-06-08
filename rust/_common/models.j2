@@ -93,10 +93,10 @@ pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) %}
     {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }},
 
-    {% endif -%}
+    {%- endif -%}
     {%- endfor %}
 
-    {{ clear_bucket(bucket="enum") }}
+    {{- clear_bucket(bucket="enum") }}
 }
 
 impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
@@ -111,15 +111,15 @@ impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
             {%- elif model.enum.type in ["number", "integer"] -%}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
             {%- elif option is matching("^[\d]+") -%}
-            {% set a = 'Code' ~ option %}
+            {%- set a = 'Code' ~ option -%}
             {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
             {%- else -%}
-            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) %}
+            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) -%}
             {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }}
             {%- endif %} => "{{ option }}",
             {%- endfor %}
 
-            {{ clear_bucket(bucket="enum") }}
+            {{- clear_bucket(bucket="enum") }}
         }
     }
 }
@@ -144,16 +144,16 @@ impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
             {%- elif model.enum.type in ["number", "integer"] -%}
             {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
             {%- elif option is matching("^[\d]+") -%}
-            {% set a = 'Code' ~ option %}
+            {%- set a = 'Code' ~ option -%}
             {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
             {%- else -%}
-            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) %}
+            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) -%}
             {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }}
             {%- endif %}),
             {%- endfor %}
             _ => Err(format!("Unknown variant: {}", s))
 
-            {{ clear_bucket(bucket="enum") }}
+            {{- clear_bucket(bucket="enum") }}
         }
     }
 }
