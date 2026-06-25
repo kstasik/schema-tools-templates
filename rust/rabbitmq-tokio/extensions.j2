@@ -88,7 +88,7 @@ impl super::PublishMessage for {{ m::model_name(name = model.object.name) }} {
     type Payload = {{ m::type(property = payload) }};
     
     fn into_parts(self) -> (FieldTable, Self::Payload) {
-        let mut headers = FieldTable::default();
+        let mut headers: FieldTable = self.meta.into();
         headers.insert(
             ShortString::from("type"),
             AMQPValue::LongString(LongString::from(
