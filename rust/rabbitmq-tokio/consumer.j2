@@ -349,10 +349,17 @@ async fn process_delivery<D: Clone + Send + Sync + 'static>(
     deps: Arc<D>,
     delivery: Delivery,
 ) {
-    let Some(headers) = delivery.properties.headers().as_ref() else {
+    let Some(original_headers) = delivery.properties.headers().as_ref() else {
         let _ = delivery.nack(BASIC_NACK).await;
         return;
     };
+    let mut headers = original_headers.inner().clone();
+    for (key, value) in original_headers.inner() {
+        headers
+            .entry(key.as_str().to_lowercase().into())
+            .or_insert_with(|| value.clone());
+    }
+    let headers = FieldTable::from(headers);
 
     let msg_type = headers.inner().get("type").and_then(|v| {
         if let AMQPValue::LongString(s) = v {
@@ -380,7 +387,7 @@ async fn process_delivery<D: Clone + Send + Sync + 'static>(
                         (*deps).clone(),
                         IncomingMessage {
                             data: &delivery.data,
-                            headers,
+                            headers: &headers,
                             delivery_tag: delivery.delivery_tag,
                             routing_key: delivery.routing_key.as_str(),
                         },
