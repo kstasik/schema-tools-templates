@@ -1,4 +1,4 @@
-{% macro property_name(name) %}{% filter nospaces %}
+{% component property_name(name) %}{% filter nospaces %}
     {{ name | replace(from="-", to="") | when_numeric(prefix="n") | snakecase }}
     {% if name | snakecase in [
         "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
@@ -7,27 +7,27 @@
         "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
         "unsized", "virtual", "yield", "try", "result"
     ] %}_{% endif %}
-{% endfilter %}{% endmacro property_name %}
+{% endfilter %}{% endcomponent property_name %}
 
-{% macro has_format(format, models) -%}
-{% for model in models | filter(attribute="object") -%}
+{% component has_format(format, models) -%}
+{% for model in [item for item in models if item.object] -%}
 {% for property in model.object.properties -%}
-{% if property.validation and property.validation.format and property.validation.format == format %}1{% endif %}
+{% if property.validation?.format == format %}1{% endif %}
 {%- endfor %}
 {%- endfor %}
-{%- endmacro has_format %}
+{%- endcomponent has_format %}
 
-{% macro model_name(name) %}{% filter nospaces %}
+{% component model_name(name) %}{% filter nospaces %}
     {{ name  }}
-{% endfilter %}{% endmacro model_name %}
+{% endfilter %}{% endcomponent model_name %}
 
-{% macro is_primitive(type) %}{% filter nospaces %}{% endfilter %}{% endmacro is_primitive %}
+{% component is_primitive(type) %}{% filter nospaces %}{% endfilter %}{% endcomponent is_primitive %}
 
-{% macro to_string(q, required, name='') %}{% filter nospaces %}
+{% component to_string(q, required, name='') %}{% filter nospaces %}
 {% if name != "" %}
 {% set real_name = name -%}
 {% else %}
-{% set real_name = "self." | concat(with=self::property_name(name = q.name)) -%}
+{% set real_name = "self." ~ <property_name name={q.name}/> -%}
 {% endif %}
 {% if q.type == "enum" %}
     {{ real_name }}.to_string()
@@ -36,13 +36,13 @@
 {% else %}
     format!("{}", {{ real_name }})
 {% endif %}
-{% endfilter %}{% endmacro to_string %}
+{% endfilter %}{% endcomponent to_string %}
 
-{% macro to_str(q, name='') %}{% filter nospaces %}
+{% component to_str(q, name='') %}{% filter nospaces %}
 {% if name != "" %}
 {% set real_name = name -%}
 {% else %}
-{% set real_name = "self." | concat(with=self::property_name(name = q.name)) -%}
+{% set real_name = "self." ~ <property_name name={q.name}/> -%}
 {% endif %}
 {% if q.type == "string" and q.validation and q.validation.format and q.validation.format == "uuid" %}
     {{ real_name }}.to_string().as_ref()
@@ -53,21 +53,22 @@
 {% else %}
     format!("{}", {{ real_name }}).as_ref()
 {% endif %}
-{% endfilter %}{% endmacro to_str %}
+{% endfilter %}{% endcomponent to_str %}
 
-{% macro enum_variant(name, base) %}{% filter nospaces %}
+{% component enum_variant(name, base_name) %}{% filter nospaces %}
+{% set base = <model_name name={base_name}/> -%}
 {{ name | pascalcase | when_numeric(prefix=base) }}
-{% endfilter %}{% endmacro enum_variant %}
+{% endfilter %}{% endcomponent enum_variant %}
 
 
-{% macro range_type_validation(value, type) %}{% filter nospaces %}
-    {% set value_str = value | as_str %}
-    {% if type == "number" and value_str is not containing(".") %}
+{% component range_type_validation(value, type) %}{% filter nospaces %}
+    {% set value_str = value | str %}
+    {% if type == "number" and value_str is not containing(pat=".") %}
         .0
     {% endif %}
-{% endfilter %}{% endmacro range_type_validation %}
+{% endfilter %}{% endcomponent range_type_validation %}
 
-{% macro get_validation(validation, regex_path="", form=false, type="integer") %}{% filter nospaces %}
+{% component get_validation(validation, regex_path="", form=false, type="integer") %}{% filter nospaces %}
     {% if validation.format and validation.format in ["decimal", "uuid"] %}
     {% else %}
         {% if validation.minLength %}length(min = {{ validation.minLength }}{% if validation.maxLength %}, max = {{ validation.maxLength }}{% endif %}), {% endif %}
@@ -78,27 +79,27 @@
         {% if validation.pattern %}pattern({{ regex_path }}{{ validation.pattern.name | snakecase | upper }}), {% endif %}
         {% if validation.minimum is defined or validation.maximum is defined %}
         range(
-            {% if validation.minimum is defined %}min = {{ validation.minimum }}{{ self::range_type_validation(value = validation.minimum, type = type) }}{% if validation.maximum is defined %}, {% endif %}{% endif %}
-            {% if validation.maximum is defined %}max = {{ validation.maximum }}{{ self::range_type_validation(value = validation.maximum, type = type) }}{% endif %}
+            {% if validation.minimum is defined %}min = {{ validation.minimum }}{{ <range_type_validation value={validation.minimum} type={type}/> }}{% if validation.maximum is defined %}, {% endif %}{% endif %}
+            {% if validation.maximum is defined %}max = {{ validation.maximum }}{{ <range_type_validation value={validation.maximum} type={type}/> }}{% endif %}
         )
         {% endif %}
         {% if form %}){% endif %}
     {% endif %}
-{% endfilter %}{% endmacro get_validation %}
+{% endfilter %}{% endcomponent get_validation %}
 
-{% macro model_validation(model, options, is_required=true, regex_path="", style="") %}{% filter nospaces %}
+{% component model_validation(model, options, is_required=true, regex_path="", style="") %}{% filter nospaces %}
     {% if not options.skipValidate %}
         {% if model == 'none' %}
         #[garde(skip)]
         {% elif model.validation and model.type != 'enum' %}
-            {% if self::get_validation(validation = model.validation, form = style == "form", type = model.type) | length %}
+            {% if <get_validation validation={model.validation} form={style == "form"} type={model.type}/> | length %}
                 #[garde(
                     {% if not is_required -%}inner({%- endif -%}
-                    {{ self::get_validation(validation = model.validation, regex_path = regex_path, form = style == "form", type = model.type) }}
+                    {{ <get_validation validation={model.validation} regex_path={regex_path} form={style == "form"} type={model.type}/> }}
                     {%- if model.type == "array" and model.model.validation and model.model.type != "enum" %}
                         {% if not model.required -%}inner({%- endif -%}
                         {%- if model.nullable -%}inner({%- endif -%}
-                        inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, type = model.model.type) }})
+                        inner({{ <get_validation validation={model.model.validation} regex_path={regex_path} type={model.model.type}/> }})
                         {%- if model.nullable -%}){%- endif %}
                         {%- if not model.required -%}){%- endif %}
                     {% endif %}
@@ -108,12 +109,12 @@
                 #[garde(skip)]
             {% endif %}
         {% elif model.type == 'array' and model.model.validation and model.model.type != "enum" %}
-            {% if self::get_validation(validation = model.model.validation, form = style == "form", type = model.model.type) | length %}
+            {% if <get_validation validation={model.model.validation} form={style == "form"} type={model.model.type}/> | length %}
                 #[garde(
                     {%- if not is_required -%}inner({%- endif -%}
                     {%- if not model.required -%}inner({%- endif -%}
                     {%- if model.nullable -%}inner({%- endif -%}
-                    inner({{ self::get_validation(validation = model.model.validation, regex_path = regex_path, form = style == "form", type = model.model.type) }})
+                    inner({{ <get_validation validation={model.model.validation} regex_path={regex_path} form={style == "form"} type={model.model.type}/> }})
                     {%- if model.nullable -%}){%- endif %}
                     {%- if not model.required -%}){%- endif -%}
                     {%- if not is_required -%}){%- endif -%}
@@ -121,44 +122,44 @@
             {% else %}
                 #[garde(skip)]
             {% endif %}
-        {% elif self::need_nested_validation(property=model) == "1" %}
+        {% elif <need_nested_validation property={model}/> == "1" %}
             #[garde(dive)]
         {% else %}
             #[garde(skip)]
         {% endif %}
     {% endif %}
-{% endfilter %}{% endmacro model_validation %}
+{% endfilter %}{% endcomponent model_validation %}
 
-{% macro enum_validation(option, options, regex_path="") %}{% filter nospaces %}
+{% component enum_validation(option, options, regex_path="") %}{% filter nospaces %}
     {%- if not options.skipValidate %}
-        {%- if option.x._discriminator.value.model %}
+        {%- if option.x?._discriminator?.value?.model %}
             #[garde(dive)]
         {%- else %}
             #[garde(skip)]
         {%- endif %}
     {%- endif %}
-{% endfilter %}{% endmacro model_validation %}
+{% endfilter %}{% endcomponent enum_validation %}
 
-{% macro type(property, ns="") %}{% filter nospaces %}
+{% component type(property, ns="") %}{% filter nospaces %}
 {% if property.nullable %}Option<{% endif %}
 
 {# todo: model name cannot be one of json-schema types, infinite loop, check #}
 
-{% if property.x.type %}
-    {{ property.x.type }}
-{% elif property.validation and property.validation.format and property.validation.format == "decimal" %}
+{% if property.x?.type %}
+    {{ property.x?.type }}
+{% elif property.validation?.format == "decimal" %}
     Decimal
 {% elif property.type == "string" %}
-    {% if property.validation and property.validation.format and property.validation.format == "uuid" %}
+    {% if property.validation?.format == "uuid" %}
     uuid::Uuid
-    {% elif property.validation and property.validation.format and property.validation.format in ["date-time", "date"] %}
+    {% elif property.validation?.format in ["date-time", "date"] %}
     DateTime<Utc>
     {% else %}
     String
     {% endif %}
 {% elif property.type == "boolean" %}
     bool
-{% elif property.type == "integer" and property.validation.minimum | default(value = -1) >= 0 %}
+{% elif property.type == "integer" and property.validation?.minimum | default(value = -1) >= 0 %}
     u64
 {% elif property.type == "integer" %}
     i64
@@ -167,83 +168,83 @@
 {% elif property.type == "any" %}
     serde_json::Value
 {% elif property.type == "array" and property.model %}
-    Vec<{{ self::type(property = property.model, ns = ns) }}>
+    Vec<{{ <type property={property.model} ns={ns}/> }}>
 {% elif property.type == "map" and property.model %}
-    BTreeMap<String, {{ self::type(property = property.model, ns = ns) }}>
+    BTreeMap<String, {{ <type property={property.model} ns={ns}/> }}>
 {% elif property.type == "object" and property.model %}
-    {% if ns %}{{ ns }}::{% endif %}{{ self::model_name(name = property.model.type) }}
+    {% if ns %}{{ ns }}::{% endif %}{{ <model_name name={property.model.type}/> }}
 {% elif property.type == "wrapper" and property.model %}
-    {% if ns %}{{ ns }}::{% endif %}{{ self::model_name(name = property.model.name) }}
+    {% if ns %}{{ ns }}::{% endif %}{{ <model_name name={property.model.name}/> }}
 {% elif property.type == "enum" and property.model %}
-    {% if ns %}{{ ns }}::{% endif %}{{ self::model_name(name = property.model.name) }}Variant
+    {% if ns %}{{ ns }}::{% endif %}{{ <model_name name={property.model.name}/> }}Variant
 {% endif %}
 
 {% if property.nullable %}>{% endif %}
-{% endfilter %}{% endmacro type %}
+{% endfilter %}{% endcomponent type %}
 
-{% macro do_not_modify() %}
+{% component do_not_modify() %}
 //
 // This file is generated from openapi specification. Please do not modify it.
 // It should be .gitignored
 //
 #![allow(warnings)]
 #![allow(clippy::all)]
-{% endmacro do_not_modify %}
+{% endcomponent do_not_modify %}
 
-{% macro get_auth_header(security) -%}
+{% component get_auth_header(security) -%}
 {% if security.scheme == 'basic' %}Authorization{% else %}{{ security.name }}{% endif %}
-{%- endmacro get_auth_header %}
+{%- endcomponent get_auth_header %}
 
-{% macro endpoint_return(success, endpoint, headers, options) -%}{% filter nospaces %}Result<
-    {% if success == "no-models" or success.contentType is not starting_with("application/json") %}
-        {% if success.model and success.model.type == "object" and success.model.model and success.model.model.name %}
-            {{ self::endpoint_model_response(success = success, headers = headers) }}
-        {% elif success.model and success.model.type == "wrapper" and success.model.model and success.model.model.type %}
-            {{ self::endpoint_model_response(success = success, headers = headers) }}
-        {% elif success.model.validation and success.model.validation.format == "binary" %}
-            {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
-        {% elif success.contentType and (success.contentType == "text/html" or (success.model and success.model.type == "string")) %}
+{% component endpoint_return(success, endpoint, headers, options) -%}{% filter nospaces %}Result<
+    {% if success == "no-models" or success.contentType is not starting_with(pat="application/json") %}
+        {% if success.model is defined and success.model?.type == "object" and success.model?.model is defined and success.model?.model?.name %}
+            {{ <endpoint_model_response success={success} headers={headers}/> }}
+        {% elif success.model is defined and success.model?.type == "wrapper" and success.model?.model is defined and success.model?.model?.type %}
+            {{ <endpoint_model_response success={success} headers={headers}/> }}
+        {% elif success.model?.validation?.format == "binary" %}
+            {{ <endpoint_default_response endpoint={endpoint} options={options}/> }}
+        {% elif success.contentType and (success.contentType == "text/html" or (success.model is defined and success.model?.type == "string")) %}
             String
         {% else %}
-            {{ self::endpoint_default_response(endpoint = endpoint, options = options) }}
+            {{ <endpoint_default_response endpoint={endpoint} options={options}/> }}
         {% endif %}
-    {% elif success.model %}
-        {{ self::endpoint_model_response(success = success, headers = headers) }}
+    {% elif success.model is defined %}
+        {{ <endpoint_model_response success={success} headers={headers}/> }}
     {% else %}
     reqwest::Response
     {% endif %},
-    {{ self::endpoint_error(endpoint = endpoint, options = options) }}
->{% endfilter %}{%- endmacro skipped_headers %}
+    {{ <endpoint_error endpoint={endpoint} options={options}/> }}
+>{% endfilter %}{%- endcomponent endpoint_return %}
 
-{% macro endpoint_model_response(success, headers) -%}
+{% component endpoint_model_response(success, headers) -%}
     {% if headers | length > 0 %}({% endif %}
-    {{ self::type(property = success.model, ns = "model") }}
+    {{ <type property={success.model} ns="model"/> }}
     {% if headers | length > 0 %}, reqwest::header::HeaderMap
     ){% endif %}
-{%- endmacro endpoint_model_response %}
-{% macro endpoint_default_response(endpoint, options) -%}endpoint::{{ endpoint.operation | pascalcase }}Response{%- endmacro endpoint_default_response %}
+{%- endcomponent endpoint_model_response %}
+{% component endpoint_default_response(endpoint, options) -%}endpoint::{{ endpoint.operation | pascalcase }}Response{%- endcomponent endpoint_default_response %}
 
-{% macro endpoint_error(endpoint, options) -%}{% filter nospaces %}
-{% if options.errorWrapperType %}{{ options.errorWrapperType }}{% else %}ClientError<{{ self::endpoint_error_body(endpoint = endpoint, options = options) }}>{% endif %}
-{% endfilter %}{%- endmacro skipped_headers %}
+{% component endpoint_error(endpoint, options) -%}{% filter nospaces %}
+{% if options.errorWrapperType %}{{ options.errorWrapperType }}{% else %}ClientError<{{ <endpoint_error_body endpoint={endpoint} options={options}/> }}>{% endif %}
+{% endfilter %}{%- endcomponent endpoint_error %}
 
-{% macro endpoint_error_body(endpoint, options) -%}{% filter nospaces %}
+{% component endpoint_error_body(endpoint, options) -%}{% filter nospaces %}
 {% if options.globalError %}
     {{ options.globalError }}
 {% else %}
     endpoint::{{ endpoint.operation | pascalcase }}Error
 {% endif %}
-{% endfilter %}{%- endmacro skipped_headers %}
+{% endfilter %}{%- endcomponent endpoint_error_body %}
 
-{% macro endpoint_map_error(reqwest, endpoint, options) %}{% filter nospaces %}
-    ClientError::<{{ self::endpoint_error_body(endpoint = endpoint, options = options) }}>::from_reqwest({{ reqwest }})
-{% endfilter %}{% endmacro endpoint_map_error %}
+{% component endpoint_map_error(reqwest, endpoint, options) %}{% filter nospaces %}
+    ClientError::<{{ <endpoint_error_body endpoint={endpoint} options={options}/> }}>::from_reqwest({{ reqwest }})
+{% endfilter %}{% endcomponent endpoint_map_error %}
 
-{% macro endpoint_handle_error(response, endpoint, options) %}{% filter nospaces %}
-    ClientError::<{{ self::endpoint_error_body(endpoint = endpoint, options = options) }}>::from_response({{ response }}).await
-{% endfilter %}{% endmacro endpoint_handle_error %}
+{% component endpoint_handle_error(response, endpoint, options) %}{% filter nospaces %}
+    ClientError::<{{ <endpoint_error_body endpoint={endpoint} options={options}/> }}>::from_response({{ response }}).await
+{% endfilter %}{% endcomponent endpoint_handle_error %}
 
-{% macro model_to_string(name, property) %}{% filter nospaces %}
+{% component model_to_string(name, property) %}{% filter nospaces %}
 {% if property.type == "enum" %}
 {{ name }}.to_string()
 {% elif property.type == "string" %}
@@ -251,15 +252,15 @@
 {% else %}
 /* todo */
 {% endif %}
-{% endfilter %}{% endmacro model_to_string %}
+{% endfilter %}{% endcomponent model_to_string %}
 
-{% macro need_nested_validation(property) %}{% filter nospaces %}
+{% component need_nested_validation(property) %}{% filter nospaces %}
     {% if property.model and property.model.type == "array" and property.model.model %}
-        {{ self::need_nested_validation(property = property.model.model) }}
+        {{ <need_nested_validation property={property.model.model}/> }}
     {% elif property.type in ["map", "array"] and property.model.type == "any" %}
         0
-    {% elif property.type != "enum" and not property.x.type and property.model and property.model.type not in [
+    {% elif property.type != "enum" and not property.x?.type and property.model and property.model.type not in [
         "string", "number", "integer", "boolean", "bool", "null", "enum"] %}
         1
     {% endif %}
-{% endfilter %}{% endmacro need_nested_validation %}
+{% endfilter %}{% endcomponent need_nested_validation %}

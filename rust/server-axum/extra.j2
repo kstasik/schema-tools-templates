@@ -1,29 +1,28 @@
-{%- import "macros.j2" as m -%}
 
-{% macro log(type, options) -%}{% filter trim %}
+{% component axum_log(type, options) -%}{% filter trim %}
 {% if options.log | default(value = "tracing") == "tracing" %}
 tracing::{{ type }}!
 {% elif options.log == "log" %}
 log::{{ type }}!
 {% endif %}
-{% endfilter %}{%- endmacro log %}
+{% endfilter %}{%- endcomponent axum_log %}
 
-{% macro skipped_headers(endpoint, options) -%}{% filter trim %}
+{% component axum_skipped_headers(endpoint, options) -%}{% filter trim %}
 traceparent tracestate
-{% endfilter %}{%- endmacro skipped_headers %}
+{% endfilter %}{%- endcomponent axum_skipped_headers %}
 
-{% macro into_response(response, name, headers=false) -%}
-{%- if not response.models.default.model.model and response.models.default.model and headers | length > 0 -%}
+{% component axum_into_response(response, name, headers=[]) -%}
+{%- if not response.models["default"]?.model?.model and response.models["default"]?.model and headers | length > 0 -%}
 model.body.into_response()
-{%- elif response.models.default.model.type == "string" %}
+{%- elif response.models["default"]?.model?.type == "string" %}
 model.into_response()
 {%- else %}
 (StatusCode::from_u16({{ response.statusCode }}).unwrap(), Json({{ name }})).into_response()
 {% endif %}
-{%- endmacro into_response %}
+{%- endcomponent axum_into_response %}
 
-{% macro endpoint_parameters(endpoint, namespace="super") -%}
-{%- set skipped_headers = self::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") -%}
+{% component axum_endpoint_parameters(endpoint, namespace="super") -%}
+{%- set skipped_headers = <axum_skipped_headers endpoint={endpoint} options={options}/> | split(pat=" ") -%}
 {%- set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) -%}
 {%- if endpoint.parameters.path | length > 0 -%}
 {{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}Path,
@@ -31,18 +30,18 @@ model.into_response()
 {%- if endpoint.parameters.query | length > 0 -%}
 {{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}Query,
 {%- endif -%}
-{%- if endpoint.requestbody.models.default -%}
-{{ namespace }}model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }},
+{%- if endpoint.requestbody?.models?["default"] -%}
+{{ namespace }}model::{{<model_name name={endpoint.requestbody?.models?["default"]?.model?.model?.name}/>}},
 {%- endif -%}
 {%- if filtered_headers | length > 0 -%}
 {{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
 {%- endif -%}
-{%- endmacro endpoint_parameters %}
+{%- endcomponent axum_endpoint_parameters %}
 
-{% macro handler_definition_body(endpoint, options, filtered_headers, namespace="super::") -%}
+{% component axum_handler_definition_body(endpoint, options, filtered_headers, namespace="super::") -%}
 {%- set qs = options.qs | default(value = "serde_urlencoded") -%}
 {%- set extract = options.extract | default(value = "axum::extract") -%}
-{%- set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody.models.default %}
+{%- set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody?.models?["default"] %}
                     {%- if extra %}
                     {%- if endpoint.parameters.path | length > 0 %}
                     let path = match {{ extract }}::Path::<{{ namespace }}endpoint::{{ endpoint.operation | pascalcase }}Path>::from_request_parts(&mut parts, state).await {
@@ -59,12 +58,12 @@ model.into_response()
                     {%- endif %}
                     {%- endif %}
 
-{%- endmacro handler_definition_body %}
+{%- endcomponent axum_handler_definition_body %}
 
-{% macro handler_definition_body_fr(endpoint, options, filtered_headers, namespace="super::") -%}
+{% component axum_handler_definition_body_fr(endpoint, options, filtered_headers, namespace="super::") -%}
 {%- set qs = options.qs | default(value = "serde_urlencoded") -%}
 {%- set extract = options.extract | default(value = "axum::extract") -%}
-{%- set extra = filtered_headers | length > 0 or endpoint.requestbody.models.default %}
+{%- set extra = filtered_headers | length > 0 or endpoint.requestbody?.models?["default"] %}
                     {%- if extra %}
                     let req = Request::from_parts(parts, body);
                     {%- if filtered_headers | length > 0 %}
@@ -74,25 +73,25 @@ model.into_response()
                     };
                     {% endif %}
 
-                    {%- if endpoint.requestbody.models.default -%}
-                    let body = match {% if extract == 'axum::extract' %}axum::{% else %}{{ extract }}::{% endif %}Json::<{{ namespace }}model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }}>::from_request(req, state).await {
+                    {%- if endpoint.requestbody?.models?["default"] -%}
+                    let body = match {% if extract == 'axum::extract' %}axum::{% else %}{{ extract }}::{% endif %}Json::<{{ namespace }}model::{{<model_name name={endpoint.requestbody?.models?["default"]?.model?.model?.name}/>}}>::from_request(req, state).await {
                         Ok(value) => value,
                         Err(err) => return err.into_response(),
                     };
                     {%- endif %}
                     {%- endif %}
 
-{%- endmacro handler_definition_body_fr %}
+{%- endcomponent axum_handler_definition_body_fr %}
 
 
-{% macro handler_definition_parameters(endpoint, options, filtered_headers) -%}    
+{% component axum_handler_definition_parameters(endpoint, options, filtered_headers) -%}
 {%- if endpoint.parameters.path | length > 0 -%}, path.0{%- endif -%}
 {%- if endpoint.parameters.query | length > 0 -%}, query.0{%- endif %}
-{%- if endpoint.requestbody.models.default -%}, body.0{%- endif -%}
+{%- if endpoint.requestbody?.models?["default"] -%}, body.0{%- endif -%}
 {%- if filtered_headers | length > 0 -%}, headers{%- endif -%}
-{%- endmacro handler_definition_parameters %}
+{%- endcomponent axum_handler_definition_parameters %}
 
-{% macro into_header_value(parameter, variable) -%}
+{% component axum_into_header_value(parameter, variable) -%}
 {%- if parameter.model.type == "string" and parameter.model.validation and parameter.model.validation.format == "uuid" -%}
 HeaderValue::from_str(&{{ variable }}.to_string()).unwrap()
 {%- elif parameter.model.type == "string" -%}
@@ -102,5 +101,5 @@ HeaderValue::from({{ variable }})
 {%- else -%}
 HeaderValue::from_str(&{{ variable }}).unwrap()
 {%- endif -%}
-{%- endmacro endpoint_parameters %}
+{%- endcomponent axum_into_header_value %}
 
