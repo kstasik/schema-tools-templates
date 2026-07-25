@@ -1,7 +1,5 @@
 {# type=tags,filename=api/service.rs,min_version=0.5.0 #}
-{%- import "macros.j2" as m -%}
-{%- import "extra.j2" as e -%}
-{{ m::do_not_modify() }}
+{{<do_not_modify/>}}
 use actix_web::web;
 use futures::{Future, future::LocalBoxFuture};
 use std::marker::PhantomData;
@@ -15,7 +13,7 @@ struct {{ endpoint.operation | pascalcase }}Service<
 	{{ endpoint.operation | pascalcase }}Response,
 	Dependencies
 > where
-		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}: Fn({{ <actix_endpoint_parameters endpoint={endpoint}/> }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
 		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
 		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
         Dependencies: actix_web::FromRequest + 'static {
@@ -33,7 +31,7 @@ impl<
 	{{ endpoint.operation | pascalcase }}Response,
 	Dependencies
 > where
-		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}: Fn({{ <actix_endpoint_parameters endpoint={endpoint}/> }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
 		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
 		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
         Dependencies: actix_web::FromRequest + 'static {
@@ -55,7 +53,7 @@ impl<
 	{{ endpoint.operation | pascalcase }}Response,
 	Dependencies
 > where
-		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}: Fn({{ <actix_endpoint_parameters endpoint={endpoint}/> }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
 		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
 		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
         Dependencies: actix_web::FromRequest + 'static {
@@ -66,7 +64,7 @@ impl<
     actix_web::dev::always_ready!();
 
     fn call(&self, req: actix_web::dev::ServiceRequest) -> Self::Future {
-		let (req, {% if endpoint.requestbody.models.default -%}mut payload{% else %}_{% endif %}) = req.into_parts();
+		let (req, {% if endpoint.requestbody?.models?["default"] -%}mut payload{% else %}_{% endif %}) = req.into_parts();
 
         let handle = self.handler.clone(); // todo: why clone
         Box::pin(async move {
@@ -74,7 +72,7 @@ impl<
                 Dependencies::extract(&req).await.map_err(|e| e.into())
             };
 
-			{% set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody.models.default %}
+			{% set extra = endpoint.parameters.path | length > 0 or endpoint.parameters.query | length > 0 or endpoint.requestbody?.models?["default"] %}
 
 			{% if extra %}
 			{% if endpoint.parameters.path | length > 0 %}
@@ -86,23 +84,23 @@ impl<
 			let query = <{% if qs == "serde_qs" %}super::qs::QsQuery{% else %}web::Query{% endif %}::<super::endpoint::{{ endpoint.operation | pascalcase }}Query> as actix_web::FromRequest>::extract(&req);
 			{% endif %}
 
-			{% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+			{% set skipped_headers = <actix_skipped_headers endpoint={endpoint} options={options}/> | split(pat=" ") %}
 			{% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 			{%- if filtered_headers | length > 0 %}
 			let headers = <super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders as actix_web::FromRequest>::extract(&req);
 			{% endif %}
 
-			{% if endpoint.requestbody.models.default -%}
-			let body = <web::Json::<super::model::{{ self::model_name(name = endpoint.requestbody.models.default.model.model.name) }}> as actix_web::FromRequest>::from_request(&req, &mut payload);
+			{% if endpoint.requestbody?.models?["default"] -%}
+			let body = <web::Json::<super::model::{{ <model_name name={endpoint.requestbody?.models?["default"]?.model?.model?.name}/> }}> as actix_web::FromRequest>::from_request(&req, &mut payload);
 			{% endif %}
 
-            let extract = futures::try_join!({% if endpoint.requestbody.models.default %}body, {% endif %}{% if endpoint.parameters.path | length > 0 %}path, {% endif %}{% if endpoint.parameters.query | length > 0 %}query, {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps);
+            let extract = futures::try_join!({% if endpoint.requestbody?.models?["default"] %}body, {% endif %}{% if endpoint.parameters.path | length > 0 %}path, {% endif %}{% if endpoint.parameters.query | length > 0 %}query, {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps);
             let res = match extract {
                 Err(err) => {
                     actix_web::HttpResponse::from_error(err)
                 },
-                Ok(({% if endpoint.requestbody.models.default %}body, {% endif %}{% if endpoint.parameters.path | length > 0 %}path, {% endif %}{% if endpoint.parameters.query | length > 0 %}query, {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps)) => {
-                    let response = handle({% if endpoint.parameters.path | length > 0 %}path.into_inner(), {% endif %}{% if endpoint.requestbody.models.default %}body.into_inner(), {% endif %}{% if endpoint.parameters.query | length > 0 %}query.into_inner(), {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps).await;
+                Ok(({% if endpoint.requestbody?.models?["default"] %}body, {% endif %}{% if endpoint.parameters.path | length > 0 %}path, {% endif %}{% if endpoint.parameters.query | length > 0 %}query, {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps)) => {
+                    let response = handle({% if endpoint.parameters.path | length > 0 %}path.into_inner(), {% endif %}{% if endpoint.requestbody?.models?["default"] %}body.into_inner(), {% endif %}{% if endpoint.parameters.query | length > 0 %}query.into_inner(), {% endif %}{%- if filtered_headers | length > 0 %}headers, {%- endif -%}deps).await;
 
 					let body: super::endpoint::{{ endpoint.operation | pascalcase }}Response = response.into();
                     actix_web::HttpResponse::from(body)
@@ -141,7 +139,7 @@ pub fn configure_{{ tag.tag | snakecase }}<
 ) -> impl Fn(&mut web::ServiceConfig)
     where
 		{% for endpoint in tag.endpoints %}
-		{{ endpoint.operation | pascalcase }}: Fn({{ e::endpoint_parameters(endpoint = endpoint) }}{{ endpoint.operation | pascalcase }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
+		{{ endpoint.operation | pascalcase }}: Fn({{ <actix_endpoint_parameters endpoint={endpoint}/> }}{{ endpoint.operation | pascalcase }}Dependencies) -> {{ endpoint.operation | pascalcase }}Response + Clone + Copy + 'static,
 		{{ endpoint.operation | pascalcase }}Response: Future + 'static,
 		{{ endpoint.operation | pascalcase }}Response::Output: Into<super::endpoint::{{ endpoint.operation | pascalcase }}Response> + 'static,
 		{{ endpoint.operation | pascalcase }}Dependencies: actix_web::FromRequest + 'static,

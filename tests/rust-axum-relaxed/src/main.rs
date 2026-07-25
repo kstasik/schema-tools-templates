@@ -184,7 +184,7 @@ mod handler {
         Json(request): Json<api::model::Location>
     ) -> api::endpoint::LocationCreateV1Response {
         api::endpoint::LocationCreateV1Response::Status200(
-            api::model::CreateLocation200Response::new(request)
+            api::model::GetLocation200Response::new(request)
         )
     }
 
@@ -251,12 +251,11 @@ mod handler {
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
             return api::endpoint::AccessoryGetV1Response::Status400(
-                api::endpoint::GetAccessory400ResponseWithHeaders {
-                    body: api::model::GetAccessory400Response::new(
-                        api::model::GetAccessory400ResponseError {
-                            code:
-                                api::model::GetAccessory400ResponseErrorCodeVariant::ValidationError,
-                        },
+                api::endpoint::GetDevice400ResponseWithHeaders {
+                    body: api::model::GetDevice400Response::new(
+                        api::model::GetDevice400ResponseError::new(
+                            api::model::GetDevice400ResponseErrorCodeVariant::ValidationError,
+                        ),
                     ),
                     headers: api::endpoint::AccessoryGetV1Response400Headers {
                         x_hash_key: "hash-error".to_string(),
@@ -270,7 +269,7 @@ mod handler {
                 body: api::model::GetAccessory200Response::new(api::model::Accessory::new(
                     path.accessory_id,
                 )),
-                headers: api::endpoint::AccessoryGetV1Response200Headers {
+                headers: api::endpoint::AccessoryCreateV1Response200Headers {
                     x_hash_key: "hash".to_string(),
                 },
             },
@@ -839,23 +838,21 @@ mod tests {
         let location = model::Location {
             location_id: "test".to_string(),
             simple_mixed: Some(model::LocationSimpleMixedVariant::String("test".to_string())),
-            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Simple(model::KindDiscriminatorSimpleVariant {
-                name: "test".to_string(),
-            })),
+            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Semi),
             kind_externally_tagged: Some(model::LocationKindExternallyTaggedVariant::Complex(
-                model::LocationKindExternallyTaggedComplex{
+                model::KindUntaggedComplex {
                     name_b: "xxx".to_string(),
                 }
             )),
-            kind_internally_tagged: Some(model::LocationKindInternallyTaggedVariant::Complex(model::KindInternallyTaggedComplexVariant {
+            kind_internally_tagged: Some(model::LocationKindInternallyTaggedVariant::Complex(model::KindInternallyTaggedComplex {
                 name_b: "oooo".to_string(),
             })),
             kind_internally_tagged_inline: Some(model::LocationKindInternallyTaggedInlineVariant::Simple(
-                model::LocationKindInternallyTaggedInlineOption1Variant {
+                model::LocationKindInternallyTaggedOption1Variant {
                     name_b: "xxxx".to_string(),
                 }
             )),
-            un_tagged: Some(model::LocationUnTaggedVariant::KindUntaggedComplexVariant(model::KindUntaggedComplexVariant {
+            un_tagged: Some(model::LocationUnTaggedVariant::KindUntaggedComplex(model::KindUntaggedComplex {
                 name_b: "test".to_string(),
             })),
             un_tagged_mixed: Some(model::LocationUnTaggedMixedVariant::String("test".to_string())),
@@ -865,8 +862,7 @@ mod tests {
 
         let expected: serde_json::Value = serde_json::json!({
             "kindDiscriminator": {
-              "name": "test",
-              "testField": "simple"
+              "testField": "semi"
             },
             "kindExternallyTagged": {
               "complex": {

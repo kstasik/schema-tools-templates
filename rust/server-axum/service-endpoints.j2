@@ -1,8 +1,6 @@
 {# type=endpoints,filename=api/service/endpoint.rs,min_version=0.5.0 #}
-{%- import "macros.j2" as m -%}
-{%- import "extra.j2" as e -%}
 {%- set strict_router = options.relaxedRouter is not defined -%}
-{{ m::do_not_modify() }}
+{{<do_not_modify/>}}
 {%- if strict_router %}
 use axum::{
     body::{Body, HttpBody},
@@ -34,7 +32,7 @@ macro_rules! all_the_tuples {
 }
 
 {% for endpoint in endpoints %}
-{%- set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+{%- set skipped_headers = <axum_skipped_headers endpoint={endpoint} options={options}/> | split(pat=" ") %}
 {%- set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 /// {{ endpoint.method | upper }} {{ endpoint.path }} handler
 pub trait {{ endpoint.operation | pascalcase }}Handler<T, S, B = Body>: Clone + Send + Sized + 'static {
@@ -47,10 +45,10 @@ pub trait {{ endpoint.operation | pascalcase }}Handler<T, S, B = Body>: Clone + 
 
 impl<F, Fut, S, B> {{ endpoint.operation | pascalcase }}Handler<(), S, B> for F
 where
-    F: FnOnce({{ e::endpoint_parameters(endpoint = endpoint, namespace = "super::super::") }}) -> Fut + Clone + Send + 'static,
+    F: FnOnce({{ <axum_endpoint_parameters endpoint={endpoint} namespace="super::super::"/> }}) -> Fut + Clone + Send + 'static,
     Fut: Future + Send,
     Fut::Output: Into<endpoint::{{ endpoint.operation | pascalcase }}Response>,
-    {% if endpoint.requestbody.models.default -%}
+    {% if endpoint.requestbody?.models?["default"] -%}
     B: HttpBody + Send + 'static,
     B::Data: Send,
     B::Error: Into<BoxError>,
@@ -59,8 +57,8 @@ where
     {% endif %}
     S: Send + Sync + 'static,
 {
-    {%- set body = e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers, namespace = "super::super::") -%}
-    {%- set body_fr = e::handler_definition_body_fr(endpoint = endpoint, options = options, filtered_headers = filtered_headers, namespace = "super::super::") -%}
+    {%- set body = <axum_handler_definition_body endpoint={endpoint} options={options} filtered_headers={filtered_headers} namespace="super::super::"/> -%}
+    {%- set body_fr = <axum_handler_definition_body_fr endpoint={endpoint} options={options} filtered_headers={filtered_headers} namespace="super::super::"/> -%}
     fn call(
         self,
         {% if not body and not body_fr %}_{% endif %}req: ERequest,
@@ -76,8 +74,8 @@ where
 {%- endif %}
 
             let res = self(
-                {%- filter trim_start_matches(pat=", ") -%}
-                {{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
+                {%- filter trim_start(pat=", ") -%}
+                {{ <axum_handler_definition_parameters endpoint={endpoint} options={options} filtered_headers={filtered_headers}/>}}, {% endfilter -%}
             ).await;
 
             let response: endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
@@ -92,10 +90,10 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
         #[allow(non_snake_case)]
         impl<F, Fut, S, B, $($ty,)*> {{ endpoint.operation | pascalcase }}Handler<($($ty,)*), S, B> for F
         where
-            F: FnOnce({{ e::endpoint_parameters(endpoint = endpoint, namespace = "super::super::") }}$($ty,)*) -> Fut + Clone + Send + 'static,
+            F: FnOnce({{ <axum_endpoint_parameters endpoint={endpoint} namespace="super::super::"/> }}$($ty,)*) -> Fut + Clone + Send + 'static,
             Fut: Future + Send,
             Fut::Output: Into<endpoint::{{ endpoint.operation | pascalcase }}Response>,
-            {%- if endpoint.requestbody.models.default -%}
+            {%- if endpoint.requestbody?.models?["default"] -%}
             B: HttpBody + Send + 'static,
             B::Data: Send,
             B::Error: Into<BoxError>,
@@ -110,7 +108,7 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
                     let (mut parts, body) = req.into_parts();
                     let state = &state;
 
-                    {{ e::handler_definition_body(endpoint = endpoint, options = options, filtered_headers = filtered_headers, namespace = "super::super::") }}
+                    {{ <axum_handler_definition_body endpoint={endpoint} options={options} filtered_headers={filtered_headers} namespace="super::super::"/> }}
 
                     $(
                         let $ty = match $ty::from_request_parts(&mut parts, state).await {
@@ -120,10 +118,10 @@ macro_rules! {{ endpoint.operation | snakecase }}_handler {
                     )*
 
 
-                    {{ e::handler_definition_body_fr(endpoint = endpoint, options = options, filtered_headers = filtered_headers, namespace = "super::super::") }}
+                    {{ <axum_handler_definition_body_fr endpoint={endpoint} options={options} filtered_headers={filtered_headers} namespace="super::super::"/> }}
 
-                    let res = self({%- filter trim_start_matches(pat=", ") -%}
-                        {{ e::handler_definition_parameters(endpoint = endpoint, options = options, filtered_headers = filtered_headers)}}, {% endfilter -%}
+                    let res = self({%- filter trim_start(pat=", ") -%}
+                        {{ <axum_handler_definition_parameters endpoint={endpoint} options={options} filtered_headers={filtered_headers}/>}}, {% endfilter -%}
                         $($ty,)*).await;
 
                     let response: endpoint::{{ endpoint.operation | pascalcase }}Response = res.into();
