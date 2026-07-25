@@ -1,30 +1,30 @@
+{%- import "macros.j2" as m -%}
 
-{% component actix_log(type, options) -%}{% filter trim %}
+{% macro log(type, options) -%}{% filter trim %}
 {% if options.log | default(value = "tracing") == "tracing" %}
 tracing::{{ type }}!
 {% elif options.log == "log" %}
 log::{{ type }}!
 {% endif %}
-{% endfilter %}{%- endcomponent actix_log %}
+{% endfilter %}{%- endmacro log %}
 
-{% component actix_skipped_headers(endpoint, options) -%}{% filter trim %}
+{% macro skipped_headers(endpoint, options) -%}{% filter trim %}
 traceparent tracestate
-{% endfilter %}{%- endcomponent actix_skipped_headers %}
+{% endfilter %}{%- endmacro skipped_headers %}
 
-{% component actix_endpoint_parameters(endpoint) -%}
+{% macro endpoint_parameters(endpoint) -%}
 {% if endpoint.parameters.path | length > 0 %}
 super::endpoint::{{ endpoint.operation | pascalcase }}Path,
 {% endif %}
 {% if endpoint.parameters.query | length > 0 %}
 super::endpoint::{{ endpoint.operation | pascalcase }}Query,
 {% endif %}
-{% if endpoint.requestbody?.models?["default"] -%}
-super::model::{{<model_name name={endpoint.requestbody?.models?["default"]?.model?.model?.name}/>}},
+{% if endpoint.requestbody.models.default -%}
+super::model::{{ m::model_name(name = endpoint.requestbody.models.default.model.model.name) }},
 {% endif %}
-{% set skipped_headers %}{{<actix_skipped_headers endpoint={endpoint} options={options}/>}}{% endset %}
-{% set skipped_headers = skipped_headers | split(pat=" ") %}
+{% set skipped_headers = self::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
 {% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 {% if filtered_headers | length > 0 %}
 super::endpoint::{{ endpoint.operation | pascalcase }}RequestHeaders,
 {% endif %}
-{%- endcomponent actix_endpoint_parameters %}
+{%- endmacro endpoint_parameters %}

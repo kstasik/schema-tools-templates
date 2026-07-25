@@ -1,5 +1,7 @@
 {# type=static,filename=api/qs.rs,min_version=0.5.0,if=%options.qs%:serde_qs #}
-{{<do_not_modify/>}}
+{%- import "extra.j2" as e -%}
+{%- import "macros.j2" as m -%}
+{{ m::do_not_modify() }}
 use std::{pin::Pin, sync::Arc};
 
 use axum::{

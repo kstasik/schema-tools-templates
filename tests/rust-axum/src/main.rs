@@ -58,11 +58,11 @@ mod handler {
     pub async fn devices_list_v1(
         query: api::endpoint::DevicesListV1Query,
         State(state): State<AppState>,
-    ) -> api::endpoint::DevicesListV1Response {
+    ) -> Result<api::model::ListDevices200Response, api::model::ListDevices400Response> {
         let _result = state.database.get_smth().await;
 
         if query.for_.map(|f| f.eq("test")).unwrap_or(false) {
-            return api::endpoint::DevicesListV1Response::Status200(api::model::ListDevices200Response {
+            return Ok(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -94,7 +94,7 @@ mod handler {
             })
             .unwrap_or(false)
         {
-            return api::endpoint::DevicesListV1Response::Status200(api::model::ListDevices200Response {
+            return Ok(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -114,7 +114,7 @@ mod handler {
                 )],
             });
         } else if query.page.unwrap_or(0) == 2 {
-            return api::endpoint::DevicesListV1Response::Status200(api::model::ListDevices200Response {
+            return Ok(api::model::ListDevices200Response {
                 pagination: api::model::Pagination::new(
                     1,
                     api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -135,7 +135,7 @@ mod handler {
             });
         }
 
-        api::endpoint::DevicesListV1Response::Status200(api::model::ListDevices200Response {
+        Ok(api::model::ListDevices200Response {
             pagination: api::model::Pagination::new(
                 1,
                 api::model::PaginationPageSizeVariant::PaginationPageSize10,
@@ -198,7 +198,7 @@ mod handler {
         request: api::model::Location,
     ) -> api::endpoint::LocationCreateV1Response {
         api::endpoint::LocationCreateV1Response::Status200(
-            api::model::GetLocation200Response::new(request),
+            api::model::CreateLocation200Response::new(request),
         )
     }
 
@@ -265,11 +265,12 @@ mod handler {
     ) -> api::endpoint::AccessoryGetV1Response {
         if path.accessory_id == "invalid" {
             return api::endpoint::AccessoryGetV1Response::Status400(
-                api::endpoint::GetDevice400ResponseWithHeaders {
-                    body: api::model::GetDevice400Response::new(
-                        api::model::GetDevice400ResponseError::new(
-                            api::model::GetDevice400ResponseErrorCodeVariant::ValidationError,
-                        ),
+                api::endpoint::GetAccessory400ResponseWithHeaders {
+                    body: api::model::GetAccessory400Response::new(
+                        api::model::GetAccessory400ResponseError {
+                            code:
+                                api::model::GetAccessory400ResponseErrorCodeVariant::ValidationError,
+                        },
                     ),
                     headers: api::endpoint::AccessoryGetV1Response400Headers {
                         x_hash_key: "hash-error".to_string(),
@@ -283,7 +284,7 @@ mod handler {
                 body: api::model::GetAccessory200Response::new(api::model::Accessory::new(
                     path.accessory_id,
                 )),
-                headers: api::endpoint::AccessoryCreateV1Response200Headers {
+                headers: api::endpoint::AccessoryGetV1Response200Headers {
                     x_hash_key: "hash".to_string(),
                 },
             },
@@ -903,26 +904,30 @@ mod tests {
             simple_mixed: Some(model::LocationSimpleMixedVariant::String(
                 "test".to_string(),
             )),
-            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Semi),
+            kind_discriminator: Some(model::LocationKindDiscriminatorVariant::Simple(
+                model::KindDiscriminatorSimpleVariant {
+                    name: "test".to_string(),
+                },
+            )),
             kind_externally_tagged: Some(model::LocationKindExternallyTaggedVariant::Complex(
-                model::KindUntaggedComplex {
+                model::LocationKindExternallyTaggedComplex {
                     name_b: "xxx".to_string(),
                 },
             )),
             kind_internally_tagged: Some(model::LocationKindInternallyTaggedVariant::Complex(
-                model::KindInternallyTaggedComplex {
+                model::KindInternallyTaggedComplexVariant {
                     name_b: "oooo".to_string(),
                 },
             )),
             kind_internally_tagged_inline: Some(
                 model::LocationKindInternallyTaggedInlineVariant::Simple(
-                    model::LocationKindInternallyTaggedOption1Variant {
+                    model::LocationKindInternallyTaggedInlineOption1Variant {
                         name_b: "xxxx".to_string(),
                     },
                 ),
             ),
-            un_tagged: Some(model::LocationUnTaggedVariant::KindUntaggedComplex(
-                model::KindUntaggedComplex {
+            un_tagged: Some(model::LocationUnTaggedVariant::KindUntaggedComplexVariant(
+                model::KindUntaggedComplexVariant {
                     name_b: "test".to_string(),
                 },
             )),
@@ -943,7 +948,8 @@ mod tests {
 
         let expected: serde_json::Value = serde_json::json!({
           "kindDiscriminator": {
-            "testField": "semi"
+            "name": "test",
+            "testField": "simple"
           },
           "kindExternallyTagged": {
             "complex": {

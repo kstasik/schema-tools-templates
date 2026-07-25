@@ -1,19 +1,19 @@
-{% component client_allowed_operations(endpoints, options) -%}{% filter trim %}
-{%- for endpoint in endpoints -%}
+{% macro allowed_operations(endpoints, options) -%}{% filter trim %}
+{%- for endpoint in endpoints -%} 
 {{ endpoint.operation }} {% endfor -%}
-{% endfilter %}{%- endcomponent client_allowed_operations %}
+{% endfilter %}{%- endmacro allowed_operations %}
 
-{% component client_skipped_headers(endpoint, options) -%}{% filter trim %}
+{% macro skipped_headers(endpoint, options) -%}{% filter trim %}
 traceparent tracestate
-{% endfilter %}{%- endcomponent client_skipped_headers %}
+{% endfilter %}{%- endmacro skipped_headers %}
 
-{% component client_endpoint_parameters(endpoint, options) -%}{%- endcomponent client_endpoint_parameters %}
-{% component client_endpoint_block(endpoint, options) -%}{%- endcomponent client_endpoint_block %}
+{% macro endpoint_parameters(endpoint, options) -%}{%- endmacro additional_parameters %}
+{% macro endpoint_block(endpoint, options) -%}{%- endmacro additional_parameters %}
 
-{% component client_log(type, options) -%}{% filter trim %}
+{% macro log(type, options) -%}{% filter trim %}
 {% if options.log | default(value = "tracing") == "tracing" %}
 tracing::{{ type }}!
 {% elif options.log == "log" %}
 log::{{ type }}!
 {% endif %}
-{% endfilter %}{%- endcomponent client_log %}
+{% endfilter %}{%- endmacro log %}

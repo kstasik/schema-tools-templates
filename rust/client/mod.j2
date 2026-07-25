@@ -1,10 +1,12 @@
 {# type=endpoints,filename=%options.namespace%/mod.rs,min_version=0.2.0 #}
-{{<do_not_modify/>}}
+{% import "macros.j2" as m -%}
+{% import "extra.j2" as e -%}
+{{ m::do_not_modify() }}
 {% set_global apm = options.apm | default(value = []) %}
 {% set_global qs = options.qs | default(value = "serde_urlencoded") %}
 {% set_global qs_mode = options.qs_mode | default(value = "empty_indexed") %}
 
-{% set allowed_operations = <client_allowed_operations endpoints={endpoints} options={options}/> | split(pat=" ") %}
+{% set allowed_operations = e::allowed_operations(endpoints=endpoints, options=options) | split(pat=" ") %}
 {% set filtered_endpoints = endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
 
 use std::collections::HashMap;
@@ -52,27 +54,27 @@ impl {{ options.name }} {
     #[allow(dead_code)]
     pub fn with_auth_{{ sec.scheme_name | snakecase }}(mut self, value: &str) -> Self {
         let headers = self.auth.entry("{{ sec.scheme_name }}".to_string()).or_insert(HashMap::new());
-        headers.insert(HeaderName::from_static("{{<get_auth_header security={sec}/> | lower }}"), HeaderValue::from_str(value).unwrap());
+        headers.insert(HeaderName::from_static("{{ m::get_auth_header(security = sec) | lower }}"), HeaderValue::from_str(value).unwrap());
 
         self
-    }
+    } 
     {% endfor %}
 
-    {% for endpoint in filtered_endpoints %}
-    {% set skipped_headers = <client_skipped_headers endpoint={endpoint} options={options}/> | split(pat=" ") %}
+    {% for endpoint in filtered_endpoints %} 
+    {% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
     {% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
-
+    
     {% for success in endpoint.responses.success.models.all | default(value = ["no-models"]) %}
     {% set success_headers = endpoint.responses.success.headers | default(value = []) | filter_not_inarray(attribute="name", values=skipped_headers) %}
 
     #[allow(dead_code)]
     pub async fn {{ endpoint.operation | snakecase }}{% if success.alternativeContentType %}_{{ success.contentType | snakecase }}{% elif success %}{% endif %}(
-        &self, {{ <client_endpoint_parameters endpoint={endpoint} options={options}/> }}
-        {%- for p in endpoint.parameters.path %} {{ <property_name name={p.name}/> }}: {{ <type property={p.model} ns="model"/> }},{% endfor -%}
-        {%- if endpoint.requestbody?.models?["default"] %} body: {{ <type property={endpoint.requestbody?.models?["default"]?.model} ns="model"/> }}, {% endif -%}
+        &self, {{ e::endpoint_parameters(endpoint=endpoint, options=options) }}
+        {%- for p in endpoint.parameters.path %} {{ m::property_name(name = p.name) }}: {{ m::type(property = p.model, ns = "model") }},{% endfor -%}
+        {%- if endpoint.requestbody.models.default %} body: {{ m::type(property = endpoint.requestbody.models.default.model, ns = "model" ) }}, {% endif -%}
         {%- if endpoint.parameters.query | length > 0 %} query: endpoint::{{ endpoint.operation | pascalcase }}Query, {% endif %}
         {%- if filtered_headers | length > 0 %} headers: endpoint::{{ endpoint.operation | pascalcase }}Headers, {% endif %}
-    ) -> {{ <endpoint_return success={success} endpoint={endpoint} headers={success_headers} options={options}/> }} {
+    ) -> {{ m::endpoint_return(success = success, endpoint = endpoint, headers = success_headers, options = options) }} {
         {% if "tracing" in apm %}
         let span = tracing::info_span!(
             "dependency",
@@ -85,10 +87,10 @@ impl {{ options.name }} {
             http.status_code = tracing::field::Empty
         );
         {% endif %}
-
+        
         let request = self.client.request(Method::{{ endpoint.method | upper }}, &format!("{}{{ endpoint.path | path_parts(to="{}") }}", self.uri
                 {%- for q in endpoint.parameters.path %}
-            , {{<property_name name={q.name}/>}}.to_string()
+            , {{ m::to_string(q = q.model, required = true, name = m::property_name(name = q.name) ) }}
             {% endfor -%}
         ));
 
@@ -96,9 +98,9 @@ impl {{ options.name }} {
         let mut final_headers = vec![{% if success != "no-models" %}(
             HeaderName::from_static("accept"),
             HeaderValue::from_static("{{ success.contentType }}"),
-        ),{% endif %}{%- if endpoint.requestbody?.models?["default"] %}(
+        ),{% endif %}{%- if endpoint.requestbody.models.default %}(
             HeaderName::from_static("content-type"),
-            HeaderValue::from_static("{{ endpoint.requestbody?.models?["default"]?.contentType }}"),
+            HeaderValue::from_static("{{ endpoint.requestbody.models.default.contentType }}"),
         ),
         {% endif %}];
 
@@ -127,14 +129,14 @@ impl {{ options.name }} {
         }
         {% endfor %}
 
-        {{ <client_endpoint_block endpoint={endpoint} options={options}/> }}
-
+        {{ e::endpoint_block(endpoint=endpoint, options=options) }}
+        
         let response = {% if "tracing" in apm %}async move { {% endif -%}
             {% if qs in ["serde_qs", "serde_qs_1"] %}let{%- if endpoint.parameters.query | length > 0 %} mut{% endif %} req = {% endif %}request
                 {%- if endpoint.parameters.query | length > 0 and qs == "urlencoded" %}
                 .query(&query)
                 {% endif %}
-                {%- if endpoint.requestbody?.models?["default"] %}.json(&body){% endif -%}
+                {%- if endpoint.requestbody.models.default %}.json(&body){% endif -%}
                 .headers(
                     final_headers
                         .iter()
@@ -143,7 +145,7 @@ impl {{ options.name }} {
                 )
                 {% if qs in ["serde_qs", "serde_qs_1"] %}.build().map_err(|e| {
                     {% if "tracing" in apm %}tracing::error!("reqwest failed(): {}", e);{% endif %}
-                    {{ <endpoint_map_error reqwest="e" endpoint={endpoint} options={options}/> }}
+                    {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }}
                 })?;
 
             {%- if endpoint.parameters.query | length > 0 and qs in ["serde_qs", "serde_qs_1"] %}
@@ -181,7 +183,7 @@ impl {{ options.name }} {
                 {%- endif %}
                 .map_err(|e| {
                     {%- if "tracing" in apm %}tracing::error!("reqwest failed(): {}", e);{% endif %}
-                    {{ <endpoint_map_error reqwest="e" endpoint={endpoint} options={options}/> }}
+                    {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }}
                 })
         {% if "tracing" in apm -%}
         }
@@ -192,31 +194,31 @@ impl {{ options.name }} {
         if status.is_success() {
             {% if success_headers | length > 0 %}let headers = response.headers().clone();{% endif %}
 
-            {% if success.model and success.contentType is starting_with(pat="application/json") %}
+            {% if success.model and success.contentType is starting_with("application/json") %}
             return response
-                .json::<{{ <type property={success.model} ns="model"/> }}>()
+                .json::<{{ m::type(property = success.model, ns = "model") }}>()
                 .await
-                .map_err(|e| {{ <endpoint_map_error reqwest="e" endpoint={endpoint} options={options}/> }})
+                .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
                 {% if success_headers | length > 0 %}.map(|d| (d, headers)){% endif %}
             {% else %}
                 {% if success.contentType and (success.contentType == "text/html" or success.contentType == "text/plain") %}
                     return response
                         .text()
                         .await
-                        .map_err(|e| {{ <endpoint_map_error reqwest="e" endpoint={endpoint} options={options}/> }})
+                        .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
                 {% elif not success.model or not success.model.model or not success.model.model.name or not success.model.model.type %}
-                    return Ok({{ <endpoint_default_response endpoint={endpoint} options={options}/> }}::from_response(response))
+                    return Ok({{ m::endpoint_default_response(endpoint = endpoint, options = options) }}::from_response(response))
                 {% else %}
                     return response
-                        .json::<{{ <type property={success.model} ns="model"/> }}>()
+                        .json::<{{ m::type(property = success.model, ns = "model") }}>()
                         .await
-                        .map_err(|e| {{ <endpoint_map_error reqwest="e" endpoint={endpoint} options={options}/> }})
+                        .map_err(|e| {{ m::endpoint_map_error(reqwest = "e", endpoint = endpoint, options = options) }})
                         {% if success_headers | length > 0 %}.map(|d| (d, headers)){% endif %}
                 {% endif %}
             {% endif %}
         }
 
-        Err({{ <endpoint_handle_error endpoint={endpoint} options={options} response="response"/> }})
+        Err({{ m::endpoint_handle_error(endpoint = endpoint, options = options, response = "response") }})
     }
 
     {% endfor %}

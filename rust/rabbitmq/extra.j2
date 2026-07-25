@@ -1,7 +1,7 @@
-{% component rmq_log(type, options) -%}{% filter trim %}
+{% macro log(type, options) -%}{% filter trim %}
 {% if options.log | default(value = "tracing") == "tracing" %}
 tracing::{{ type }}!
 {% elif options.log == "log" %}
 log::{{ type }}!
 {% endif %}
-{% endfilter %}{%- endcomponent rmq_log %}
+{% endfilter %}{%- endmacro log %}

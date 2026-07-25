@@ -1,4 +1,5 @@
 {# type=static,filename=rabbitmq/consumer.rs,min_version=0.2.0 #}
+{%- import "extra.j2" as e -%}
 use super::{RabbitConnectionManager, message::MessageExtractor, shutdown::Shutdown};
 use futures_util::StreamExt;
 use lapin::{
