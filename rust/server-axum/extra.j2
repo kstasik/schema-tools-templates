@@ -21,7 +21,7 @@ model.into_response()
 {% endif %}
 {%- endcomponent axum_into_response %}
 
-{% component axum_endpoint_parameters(endpoint, namespace="super") -%}
+{% component axum_endpoint_parameters(endpoint, namespace="super::") -%}
 {%- set skipped_headers = <axum_skipped_headers endpoint={endpoint} options={options}/> | split(pat=" ") -%}
 {%- set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) -%}
 {%- if endpoint.parameters.path | length > 0 -%}

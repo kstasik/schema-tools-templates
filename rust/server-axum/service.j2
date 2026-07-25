@@ -52,14 +52,14 @@ where
     ///
     /// ```ignore
     {%- if strict_router %}
-    /// async fn handler({% set _st_0 %}{<axum_endpoint_parameters endpoint={endpoint}/>}{% endset %}{{ _st_0 | trim_end(pat=",") }}) -> {{ endpoint.operation | pascalcase }}Response {
+    /// async fn handler({{ <axum_endpoint_parameters endpoint={endpoint} namespace="super::"/> | trim_end(pat=",") }}) -> {{ endpoint.operation | pascalcase }}Response {
     ///     todo!()
     /// }
     /// let router = {{ tag.tag | pascalcase }}Router::new().{{ endpoint.operation | snakecase }}(handler);
     /// ```
     ///
     /// ```
-    /// async fn handler({% set _st_1 %}{<axum_endpoint_parameters endpoint={endpoint}/>}{% endset %}{{ _st_1 | trim_end(pat=",") }}, ...extractors) -> {{ endpoint.operation | pascalcase }}Response {
+    /// async fn handler({{ <axum_endpoint_parameters endpoint={endpoint} namespace="super::"/> | trim_end(pat=",") }}, ...extractors) -> {{ endpoint.operation | pascalcase }}Response {
     ///     todo!()
     /// }
     /// let router = {{ tag.tag | pascalcase }}Router::new().{{ endpoint.operation | snakecase }}(handler);
