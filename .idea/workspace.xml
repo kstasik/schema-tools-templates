@@ -1,13 +1,217 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="f8766f4d-1bc9-4416-8f43-c50a5dea0349" name="Changes" comment="chore: update required version of schema-tools to v1.0.0">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/client/endpoints.j2" beforeDir="false" afterPath="$PROJECT_DIR$/rust/client/endpoints.j2" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/client/extra.j2" beforeDir="false" afterPath="$PROJECT_DIR$/rust/client/extra.j2" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rust/client/mod.j2" beforeDir="false" afterPath="$PROJECT_DIR$/rust/client/mod.j2" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/rust-axum-relaxed/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/tests/rust-axum-relaxed/Makefile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/rust-axum/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/tests/rust-axum/Makefile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/rust/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/tests/rust/Makefile" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="2968" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;kudlatyamroth&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;git@github.com:kstasik/schema-tools-templates.git&quot;,
+    &quot;accountId&quot;: &quot;92a715b9-785c-4f7c-a9aa-c1d6648ebf4b&quot;
+  }
+}</component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="EuNERDel" />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0002170026077066" />
+      <entry key="MS500" value="1.185051662250006" />
+      <entry key="S2" value="1.6558782778120738" />
+      <entry key="S5" value="1.8447557779273547" />
+      <entry key="S10" value="1.9221283541357725" />
+      <entry key="S30" value="2.6345049046427507" />
+      <entry key="S60" value="5.569061935828787" />
+      <entry key="M2" value="11.610344364533985" />
+      <entry key="M5" value="28.722349053205605" />
+      <entry key="M10" value="63.965937501669885" />
+      <entry key="M15" value="94.69914535320345" />
+      <entry key="M30" value="157.1562207359049" />
+      <entry key="H1" value="231.15272370892248" />
+      <entry key="H2" value="304.79715501764304" />
+      <entry key="H4" value="361.01624600267866" />
+      <entry key="D1" value="423.37489976636175" />
+      <entry key="W1" value="435.8612298281093" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="1.5267035386415973E-168" />
+      <entry key="S5" value="7.473118776007047E-68" />
+      <entry key="S10" value="2.7337005644377067E-34" />
+      <entry key="S30" value="6.490083944930245E-12" />
+      <entry key="S60" value="2.5475643161518515E-6" />
+      <entry key="M2" value="0.0015961091178712827" />
+      <entry key="M5" value="0.07607203451126981" />
+      <entry key="M10" value="0.27581159241639935" />
+      <entry key="M15" value="0.423716143132001" />
+      <entry key="M30" value="0.6509348224914706" />
+      <entry key="H1" value="0.8068053188294374" />
+      <entry key="H2" value="0.8982234236699892" />
+      <entry key="H4" value="0.9477464975772731" />
+      <entry key="D1" value="0.9910951815000733" />
+      <entry key="W1" value="0.9987230012932357" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.9332326746565726" />
+      <entry key="MS500" value="1.168231398118245" />
+      <entry key="S2" value="1.6496964838470396" />
+      <entry key="S5" value="1.8419663180867296" />
+      <entry key="S10" value="1.9206696611937544" />
+      <entry key="S30" value="2.633902632696255" />
+      <entry key="S60" value="5.56850718231838" />
+      <entry key="M2" value="11.611254964180072" />
+      <entry key="M5" value="28.79650350239575" />
+      <entry key="M10" value="64.23877606883893" />
+      <entry key="M15" value="95.11986451966966" />
+      <entry key="M30" value="157.8048044119918" />
+      <entry key="H1" value="231.95797667583534" />
+      <entry key="H2" value="305.6944524327697" />
+      <entry key="H4" value="361.9634786916846" />
+      <entry key="D1" value="424.36590056159247" />
+      <entry key="W1" value="436.85993910389425" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 2
+}</component>
+  <component name="ProjectId" id="3H0eDmLvUh2x9iuaGBzJt9YaXno" />
   <component name="ProjectViewState">
     <option name="autoscrollFromSource" value="true" />
     <option name="autoscrollToSource" value="true" />
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">
-    <property name="go.import.settings.migrated" value="true" />
-    <property name="settings.editor.selected.configurable" value="preferences.pluginManager" />
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;CidrDebugProfileConversion&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.formatter.settings.were.checked&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;#96 on feature/upgrade-to-new-tera-v2&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;ml.llm.AcpAgentsConfigurable&quot;
+  }
+}</component>
+  <component name="RustProjectSettings">
+    <option name="toolchainHomeDirectory" value="/usr/bin" />
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-30f59d01ecdd-63390994e64e-intellij.indexing.shared.core-IU-262.8665.337" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task id="LOCAL-00001" summary="fix(validation): add range type validation for numeric fields&#10;&#10;Introduced a `range_type_validation` macro to handle type-specific numeric range validation. Updated `get_validation` to support type-checking for integers and floats, ensuring correct validation generation. Adjusted test schemas to include numeric range constraints for relevant properties.">
+      <option name="closed" value="true" />
+      <created>1744720819495</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1744720819495</updated>
+    </task>
+    <task id="LOCAL-00002" summary="fix(validation): add range type validation for numeric fields&#10;&#10;Introduced a `range_type_validation` macro to handle type-specific numeric range validation. Updated `get_validation` to support type-checking for integers and floats, ensuring correct validation generation. Adjusted test schemas to include numeric range constraints for relevant properties.">
+      <option name="closed" value="true" />
+      <created>1744721408506</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1744721408506</updated>
+    </task>
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="f8766f4d-1bc9-4416-8f43-c50a5dea0349" name="Changes" comment="fix(validation): add range type validation for numeric fields&#10;&#10;Introduced a `range_type_validation` macro to handle type-specific numeric range validation. Updated `get_validation` to support type-checking for integers and floats, ensuring correct validation generation. Adjusted test schemas to include numeric range constraints for relevant properties." />
+      <created>1785009295351</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1785009295351</updated>
+    </task>
+    <task id="LOCAL-00003" summary="feat!: update to tera v2 and schema-tools v0.24.0&#10;&#10;BREAKING CHANGE: upgrade to tera v2. No more macros, now its called components.">
+      <option name="closed" value="true" />
+      <created>1785016742768</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1785016742768</updated>
+    </task>
+    <task id="LOCAL-00004" summary="fix: change typos">
+      <option name="closed" value="true" />
+      <created>1785020908726</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1785020908726</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="feat(validation): add range type validation for numeric fields&#10;&#10;Introduced a `range_type_validation` macro to handle type-specific numeric range validation. Updated `get_validation` to support type-checking for integers and floats, ensuring correct validation generation. Adjusted test schemas to include numeric range constraints for relevant properties." />
+    <MESSAGE value="fix(validation): add range type validation for numeric fields&#10;&#10;Introduced a `range_type_validation` macro to handle type-specific numeric range validation. Updated `get_validation` to support type-checking for integers and floats, ensuring correct validation generation. Adjusted test schemas to include numeric range constraints for relevant properties." />
+    <MESSAGE value="fix(validation): add range type validation for numeric fields&#10;&#10;Introduced a `range_type_validation` macro to handle type-specific numeric range validation. Updated `get_validation` to support type-checking for integers and floats, ensuring correct validation generation. Adjusted test schemas to include numeric range constraints for relevant properties." />
+    <MESSAGE value="Reapply &quot;feat!: update to tera v2 and schema-tools v0.24.0&quot;&#10;&#10;This reverts commit b1fa053f29c23a308ceb8ea30089db52a8f480cb." />
+    <MESSAGE value="feat!: update to tera v2 and schema-tools v0.24.0&#10;&#10;BREAKING CHANGE: upgrade to tera v2. No more macros, now its called components." />
+    <MESSAGE value="fix: change typos" />
+    <MESSAGE value="chore: update required version of schema-tools to v1.0.0" />
+    <option name="LAST_COMMIT_MESSAGE" value="chore: update required version of schema-tools to v1.0.0" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
   </component>
 </project>

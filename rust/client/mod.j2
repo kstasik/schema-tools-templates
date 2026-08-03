@@ -1,11 +1,10 @@
-{# type=endpoints,filename=%options.namespace%/mod.rs,min_version=0.2.0 #}
+{# type=endpoints,filename=%options.namespace%/mod.rs,min_version=1.0.0 #}
 {{<do_not_modify/>}}
 {% set_global apm = options.apm | default(value = []) %}
 {% set_global qs = options.qs | default(value = "serde_urlencoded") %}
 {% set_global qs_mode = options.qs_mode | default(value = "empty_indexed") %}
 
-{% set allowed_operations = <client_allowed_operations endpoints={endpoints} options={options}/> | split(pat=" ") %}
-{% set filtered_endpoints = endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
+{% set filtered_endpoints = endpoints %}
 
 use std::collections::HashMap;
 use reqwest::header::{HeaderName, HeaderValue};

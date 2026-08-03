@@ -1,4 +1,4 @@
-{# type=endpoints,filename=%options.namespace%/endpoint.rs,min_version=0.2.0 #}
+{# type=endpoints,filename=%options.namespace%/endpoint.rs,min_version=1.0.0 #}
 {{<do_not_modify/>}}
 use serde::{de::{self, IntoDeserializer}, Deserialize, Serialize};
 use std::fmt;
@@ -11,8 +11,7 @@ use std::pin::Pin;
 {% endif %}
 
 
-{% set allowed_operations = <client_allowed_operations endpoints={endpoints} options={options}/> | split(pat=" ") %}
-{% set filtered_endpoints = endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
+{% set filtered_endpoints = endpoints %}
 {% for endpoint in filtered_endpoints %}
 
 {% set skipped_headers = <client_skipped_headers endpoint={endpoint} options={options}/> | split(pat=" ") %}

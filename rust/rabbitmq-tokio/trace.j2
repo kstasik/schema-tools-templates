@@ -1,4 +1,4 @@
-{# type=static,filename=rabbitmq/trace.rs,min_version=0.2.0 #}
+{# type=static,filename=rabbitmq/trace.rs,min_version=1.0.0 #}
 {% set_global apm_prefix = options.apmPrefix | default(value = "") %}
 use lapin::types::{AMQPValue, FieldTable, LongString, ShortString};
 use std::sync::OnceLock;
