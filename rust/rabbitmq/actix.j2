@@ -1,7 +1,5 @@
-{# type=static,filename=rabbitmq/actix.rs,min_version=0.2.0,if=%options.client%:actix #}
-{%- import "extra.j2" as e -%}
-{%- import "macros.j2" as m -%}
-{{ m::do_not_modify() }}
+{# type=static,filename=rabbitmq/actix.rs,min_version=1.0.0,if=%options.client%:actix #}
+{{<do_not_modify/>}}
 {% set_global apm = options.apm | default(value = []) %}
 
 pub mod manager {
@@ -47,7 +45,7 @@ pub mod manager {
                         act.backoff.reset();
                     }
                     Err(err) => {
-                        {{ e::log(type = "error", options = options) }}("Cannot connect to rabbitmq: {}", err);
+                        {{<rmq_log type="error" options={options}/>}}("Cannot connect to rabbitmq: {}", err);
 
                         if let Some(timeout) = act.backoff.next_backoff() {
                             ctx.run_later(timeout, |_, ctx| ctx.stop());
@@ -93,7 +91,7 @@ pub mod manager {
                                     )
                                     .await
                                 {
-                                    {{ e::log(type = "error", options = options) }}("Connot set qos on the channel: {}", err);
+                                    {{<rmq_log type="error" options={options}/>}}("Connot set qos on the channel: {}", err);
                                     return Err(err);
                                 }
 
@@ -112,7 +110,7 @@ pub mod manager {
                                     .await
                             }
                             Err(err) => {
-                                {{ e::log(type = "error", options = options) }}("Connot create channel: {}", err);
+                                {{<rmq_log type="error" options={options}/>}}("Connot create channel: {}", err);
                                 Err(err)
                             }
                         }
@@ -264,7 +262,7 @@ pub mod producer {
                             act.backoff.reset();
                         }
                         Err(err) => {
-                            {{ e::log(type = "error", options = options) }}("Cannot create producer: {:?}", err);
+                            {{<rmq_log type="error" options={options}/>}}("Cannot create producer: {:?}", err);
 
                             if let Some(timeout) = act.backoff.next_backoff() {
                                 ctx.run_later(timeout, |_, ctx| ctx.stop());
@@ -272,7 +270,7 @@ pub mod producer {
                         }
                     },
                     Err(err) => {
-                        {{ e::log(type = "error", options = options) }}("Cannot create producer: {:?}", err);
+                        {{<rmq_log type="error" options={options}/>}}("Cannot create producer: {:?}", err);
 
                         if let Some(timeout) = act.backoff.next_backoff() {
                             ctx.run_later(timeout, |_, ctx| ctx.stop());
@@ -411,7 +409,7 @@ pub mod producer {
                             .into_actor(self)
                             .map(move |res, act, ctx| {
                                 res.map_err(|err| {
-                                    {{ e::log(type = "error", options = options) }}("An error occured during send: {}", err);
+                                    {{<rmq_log type="error" options={options}/>}}("An error occured during send: {}", err);
 
                                     if let Some(timeout) = act.backoff.next_backoff() {
                                         ctx.run_later(timeout, |_, ctx| ctx.stop());
@@ -688,12 +686,12 @@ pub mod consumer {
                                     .await
                             }
                         } {
-                            {{ e::log(type = "error", options = options) }}("confirmation issue: {:?}", err);
+                            {{<rmq_log type="error" options={options}/>}}("confirmation issue: {:?}", err);
                         }
                     })
                 }
                 Err(err) => {
-                    {{ e::log(type = "error", options = options) }}(
+                    {{<rmq_log type="error" options={options}/>}}(
                         "Cannot execute handler: {:?} (message acked)",
                         err
                     );
@@ -702,7 +700,7 @@ pub mod consumer {
                         if let Err(err) = delivery
                             .ack(lapin::options::BasicAckOptions::default())
                             .await {
-                            {{ e::log(type = "error", options = options) }}("confirmation issue: {:?}", err);
+                            {{<rmq_log type="error" options={options}/>}}("confirmation issue: {:?}", err);
                         }
                     })
                 }
@@ -811,14 +809,14 @@ pub mod consumer {
                                 Some(type_val) => format!("Cannot find handler for message with type '{}', missing correct type header (message acked)", type_val.to_string()),
                                 None => String::from("Cannot find handler for message, missing type header (message acked)"),
                             };
-                            {{ e::log(type = "error", options = options) }}("{}", error_message);
+                            {{<rmq_log type="error" options={options}/>}}("{}", error_message);
 
                             async move {
                                 if let Err(err) = delivery
                                     .ack(lapin::options::BasicAckOptions::default())
                                     .await
                                 {
-                                    {{ e::log(type = "error", options = options) }}("Cannot ack message: {:?}", err);
+                                    {{<rmq_log type="error" options={options}/>}}("Cannot ack message: {:?}", err);
                                 }
                             }
                             {% if "tracing" in apm %}.instrument(span.clone()){% endif %}
@@ -828,7 +826,7 @@ pub mod consumer {
                     }
                 }
                 Err(e) => {
-                    {{ e::log(type = "error", options = options) }}(
+                    {{<rmq_log type="error" options={options}/>}}(
                         "Critical error occured during message consumption: {}, restarting actor",
                         e
                     );
@@ -857,7 +855,7 @@ pub mod consumer {
                             act.backoff.reset();
                         }
                         Err(err) => {
-                            {{ e::log(type = "error", options = options) }}("Cannot create consumer: {:?}", err);
+                            {{<rmq_log type="error" options={options}/>}}("Cannot create consumer: {:?}", err);
 
                             if let Some(timeout) = act.backoff.next_backoff() {
                                 ctx.run_later(timeout, |_, ctx| ctx.stop());
@@ -865,7 +863,7 @@ pub mod consumer {
                         }
                     },
                     Err(err) => {
-                        {{ e::log(type = "error", options = options) }}("Cannot create consumer: {:?}", err);
+                        {{<rmq_log type="error" options={options}/>}}("Cannot create consumer: {:?}", err);
 
                         if let Some(timeout) = act.backoff.next_backoff() {
                             ctx.run_later(timeout, |_, ctx| ctx.stop());

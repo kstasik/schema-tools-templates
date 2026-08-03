@@ -1,7 +1,5 @@
-{# type=static,filename=api/qs.rs,min_version=0.2.0,if=%options.qs%:serde_qs #}
-{%- import "extra.j2" as e -%}
-{%- import "macros.j2" as m -%}
-{{ m::do_not_modify() }}
+{# type=static,filename=api/qs.rs,min_version=1.0.0,if=%options.qs%:serde_qs #}
+{{<do_not_modify/>}}
 use std::sync::Arc;
 
 use actix_web::{FromRequest, Error, web::{QueryConfig}, HttpRequest, error::QueryPayloadError};
@@ -34,7 +32,7 @@ where
             .unwrap_or_else(move |e| {
                 let e = QueryPayloadError::Deserialize(de::Error::custom(e));
 
-                {{ e::log(type = "debug", options = options) }}(
+                {{<actix_log type="debug" options={options}/>}}(
                     "Failed during Query extractor deserialization. \
                      Request path: {:?}",
                     req.path()

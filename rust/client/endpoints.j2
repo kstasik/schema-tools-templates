@@ -1,23 +1,20 @@
-{# type=endpoints,filename=%options.namespace%/endpoint.rs,min_version=0.2.0 #}
-{%- import "macros.j2" as m -%}
-{% import "extra.j2" as e -%}
-{{ m::do_not_modify() }}
+{# type=endpoints,filename=%options.namespace%/endpoint.rs,min_version=1.0.0 #}
+{{<do_not_modify/>}}
 use serde::{de::{self, IntoDeserializer}, Deserialize, Serialize};
 use std::fmt;
 use reqwest::header::{HeaderName, HeaderValue};
 use super::{ApiError, ApiResponseError, ClientError, ResponseProcessingError};
 use std::future::Future;
 use std::pin::Pin;
-{% if formats is containing("date-time") or formats is containing("date") -%}
+{% if formats is containing(pat="date-time") or formats is containing(pat="date") -%}
     use chrono::{DateTime, Utc};
 {% endif %}
 
 
-{% set allowed_operations = e::allowed_operations(endpoints=endpoints, options=options) | split(pat=" ") %}
-{% set filtered_endpoints = endpoints | filter_inarray(attribute="operation", values=allowed_operations) %}
+{% set filtered_endpoints = endpoints %}
 {% for endpoint in filtered_endpoints %}
 
-{% set skipped_headers = e::skipped_headers(endpoint=endpoint, options=options) | split(pat=" ") %}
+{% set skipped_headers = <client_skipped_headers endpoint={endpoint} options={options}/> | split(pat=" ") %}
 {% set filtered_headers = endpoint.parameters.header | filter_not_inarray(attribute="name", values=skipped_headers) %}
 //
 // {{ endpoint.method }} {{ endpoint.path }}
@@ -26,10 +23,10 @@ use std::pin::Pin;
 pub enum {{ endpoint.operation | pascalcase }}Error {
 	{% for response in endpoint.responses.all  %}
     {% if response != endpoint.responses.success %}
-	Error{{ response.statusCode }}({%- filter trim_start_matches(pat=", ") -%}
+	Error{{ response.statusCode }}({%- filter trim_start(pat=", ") -%}
 		{%- if not response.models -%}
 		{%- else -%}
-		{{ m::type(property = response.models.default.model, ns = "super::model") }}
+		{{ <type property={response.models["default"]?.model} ns="super::model"/> }}
 		{%- endif -%}
 		{% if response.headers | default(value=[]) | filter_not_inarray(attribute="name", values=skipped_headers) | length > 0 %}, reqwest::header::HeaderMap{% endif %}),
 	{% endfilter %}
@@ -49,10 +46,10 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 					{% if not response.models %}
 					Ok(Self::Error{{ response.statusCode }}(headers))
 					{% else %}
-					{% if response.models.default.contentType == "text/plain" and response.models.default.model.type == "string" %}
+					{% if response.models["default"]?.contentType == "text/plain" and response.models["default"]?.model?.type == "string" %}
 					response.text()
 					{% else %}
-					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
+					response.json::<{{ <type property={response.models["default"]?.model} ns="super::model"/> }}>()
 					{% endif %}
 						.await
 						.map(|d| Self::Error{{ response.statusCode }}(d, headers))
@@ -63,10 +60,10 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 					{% if not response.models %}
 					Ok(Self::Error{{ response.statusCode }}()),
 					{% else %}
-					{% if response.models.default.contentType == "text/plain" and response.models.default.model.type == "string" %}
+					{% if response.models["default"]?.contentType == "text/plain" and response.models["default"]?.model?.type == "string" %}
 					response.text()
 					{% else %}
-					response.json::<{{ m::type(property = response.models.default.model, ns = "super::model") }}>()
+					response.json::<{{ <type property={response.models["default"]?.model} ns="super::model"/> }}>()
 					{% endif %}
 					.await
 					.map(Self::Error{{ response.statusCode }})
@@ -84,7 +81,7 @@ impl ApiError for {{ endpoint.operation | pascalcase }}Error {
 {%- if filtered_headers | length > 0 %}
 pub struct {{ endpoint.operation | pascalcase }}Headers{
 	{%- for q in filtered_headers %}
-	pub {{ m::property_name(name = q.name) }}: {% if not q.required %}Option<{% endif %}{{ m::type(property = q.model, ns = "super::model") }}{% if not q.required %}>{% endif %},
+	pub {{ <property_name name={q.name}/> }}: {% if not q.required %}Option<{% endif %}{{ <type property={q.model} ns="super::model"/> }}{% if not q.required %}>{% endif %},
 	{% endfor -%}
 }
 
@@ -93,11 +90,11 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 		vec![
 			{%- for q in filtered_headers %}
 			{% if q.required %}
-            {% set propertyName = m::property_name(name = q.name) %}
+            {% set propertyName = <property_name name={q.name}/> %}
             {% set fullPropertyName = "self." ~ propertyName %}
-            Some((HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_str({{ m::to_str(q = q.model, required = q.required, name = fullPropertyName) }}).unwrap())),
+            Some((HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_str({{ <to_str q={q.model} name={fullPropertyName}/> }}).unwrap())),
 			{% else %}
-			self.{{ m::property_name(name = q.name) }}.map(|v| (HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_str({{ m::to_str(q = q.model, required = q.required, name = 'v') }}).unwrap())),
+			self.{{ <property_name name={q.name}/> }}.map(|v| (HeaderName::from_static("{{ q.name | lower }}"), HeaderValue::from_str({{ <to_str q={q.model} name='v'/> }}).unwrap())),
 			{% endif %}
 			{% endfor -%}
 		]
@@ -108,7 +105,7 @@ impl {{ endpoint.operation | pascalcase }}Headers {
 }
 {% endif %}
 
-{% if not endpoint.responses.success.models or endpoint.responses.success.models.default.contentType is not starting_with("application/json") %}
+{% if not endpoint.responses.success.models or endpoint.responses.success.models["default"]?.contentType is not starting_with(pat="application/json") %}
 #[derive(Debug)]
 pub struct {{ endpoint.operation | pascalcase }}Response{
 	pub response: reqwest::Response,
@@ -124,11 +121,11 @@ impl {{ endpoint.operation | pascalcase }}Response{
 {% endif %}
 
 {%- if endpoint.parameters.query | length > 0 %}
-#[derive(Serialize, Deserialize, {% if endpoint.parameters.query | filter(attribute="required", value=true) | length == 0 %}Default{% endif %})]
+#[derive(Serialize, Deserialize, {% if [item for item in endpoint.parameters.query if item.required == true] | length == 0 %}Default{% endif %})]
 pub struct {{ endpoint.operation | pascalcase }}Query{
 	{%- for q in endpoint.parameters.query %}
     #[serde(rename = "{{ q.name }}"{% if not q.required and q.nullable %}, deserialize_with = "optional_nullable"{% elif not q.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
-	pub {{ m::property_name(name = q.name) }}: {% if not q.required %}Option<{% endif %}{% if q.model %}{{ m::type(property = q.model, ns = "super::model") }}{% elif q.model.enum %}{{ m::type(property = q.model.enum, ns = "super::model") }}{% endif %}{% if not q.required %}>{% endif %},
+	pub {{ <property_name name={q.name}/> }}: {% if not q.required %}Option<{% endif %}{% if q.model %}{{ <type property={q.model} ns="super::model"/> }}{% elif q.model.enum %}{{ <type property={q.model.enum} ns="super::model"/> }}{% endif %}{% if not q.required %}>{% endif %},
 	{% endfor -%}
 }
 {% endif %}

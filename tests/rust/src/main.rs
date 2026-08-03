@@ -46,7 +46,7 @@ mod handler {
     pub async fn devices_list_v1(
         query: api::endpoint::DevicesListV1Query,
         (db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
-    ) -> Result<api::model::ListDevices200Response, api::model::ListDevices400Response> {
+    ) -> Result<api::model::ListDevices200Response, api::model::GetDevice400Response> {
         let _result = db.get_smth().await;
 
         if query.for_.map(|f| f.eq("test")).unwrap_or(false) {
@@ -142,7 +142,7 @@ mod handler {
             })
         }
     }
-    
+
     pub async fn accessory_get_v1(
         path: api::endpoint::AccessoryGetV1Path,
         (_db, _): (web::Data<Database>, web::Data<Addr<Producer>>),
@@ -162,7 +162,7 @@ mod handler {
             body: api::model::GetAccessory200Response::new(
                 api::model::Accessory::new(path.accessory_id),
             ),
-            headers: api::endpoint::AccessoryGetV1Response200Headers{
+            headers: api::endpoint::AccessoryCreateV1Response200Headers{
                 x_hash_key: "hash".to_string(),
             }
         })

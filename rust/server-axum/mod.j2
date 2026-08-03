@@ -1,7 +1,6 @@
-{# type=static,filename=api/mod.rs,min_version=0.5.0 #}
-{%- import "macros.j2" as m -%}
+{# type=static,filename=api/mod.rs,min_version=1.0.0 #}
 #![allow(dead_code, unused_imports, unused_variables, clippy::all)]
-{{ m::do_not_modify() }}
+{{<do_not_modify/>}}
 
 pub mod endpoint;
 pub mod model;

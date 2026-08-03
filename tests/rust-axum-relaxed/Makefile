@@ -2,7 +2,7 @@
 
 API_VERSION := $(shell cat spec/api/api.yaml | grep '^  version' | cut -d' ' -f4)
 
-SCHEMATOOLS_VERSION := v0.23.0
+SCHEMATOOLS_VERSION := v1.0.0
 SCHEMATOOLS_BIN = dependencies/schematools-$(SCHEMATOOLS_VERSION)
 FORMAT =
 SCHEMATOOLS_PLATFORM =
@@ -26,8 +26,8 @@ codegen: install-dependencies format
 		-c 'process dereference spec/api/api.yaml --skip-root-internal-references --create-internal-references' \
 		-c 'process merge-all-of - --leave-invalid-properties --filter "x-skip!=true"' \
 		-c 'process name - --overwrite --resource-method-version' \
-		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/server-axum/ ${FORMAT} --target-dir src/ -o qs=serde_qs -o relaxedRouter=true' \
-		-c 'codegen openapi - --template templates::rust/_common/ --template templates::rust/client/ ${FORMAT} --target-dir src/client/ -o qs=serde_qs -o apm=tracing-opentelemetry -o namespace=devices -o name=DevicesClient'
+		-c 'codegen openapi - --merge-similar-models --template templates::rust/_common/ --template templates::rust/server-axum/ ${FORMAT} --target-dir src/ -o qs=serde_qs -o relaxedRouter=true' \
+		-c 'codegen openapi - --merge-similar-models --template templates::rust/_common/ --template templates::rust/client/ ${FORMAT} --target-dir src/client/ -o qs=serde_qs -o apm=tracing-opentelemetry -o namespace=devices -o name=DevicesClient'
 
 install-dependencies: platform
 	@echo installing dependencies ...

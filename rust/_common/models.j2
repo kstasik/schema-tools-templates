@@ -1,25 +1,22 @@
-{% import "macros.j2" as m -%}
-{% import "extensions.j2" as e -%}
-{# if wrappers include #}
-{{ m::do_not_modify() }}
+{{<do_not_modify/>}}
 use serde::{Serialize, Deserialize, Deserializer};
 use std::str::FromStr;
 use std::collections::BTreeMap;
-{% if not options.skipValidate %}use garde::Validate;
+{% if not options.skipValidate | default(value=false) %}use garde::Validate;
 use regex::Regex;
 use std::sync::LazyLock;{% endif %}
 {% block use %}{% endblock use %}
 
-{% if formats is containing("decimal") %}
+{% if formats is containing(pat="decimal") %}
 use rust_decimal::Decimal;
 {% endif %}
-{% if formats is containing("date-time") or formats is containing("date") %}
+{% if formats is containing(pat="date-time") or formats is containing(pat="date") %}
 use chrono::{DateTime, Utc};
 {% endif %}
 
 {% set additionalPropertiesModels = options.additionalPropertiesModels | default(value = []) %}
 
-{% if not options.skipValidate %}
+{% if not options.skipValidate | default(value=false) %}
 pub static UUID: LazyLock<Regex> = LazyLock::new(|| { Regex::new(r"^\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$").unwrap() });
 pub static FLOAT: LazyLock<Regex> = LazyLock::new(|| { Regex::new(r"^[0-9\.]+$").unwrap() });
 {% for regexp in regexps -%}
@@ -29,37 +26,37 @@ pub static {{ regexp.name | snakecase | upper }}: LazyLock<Regex> = LazyLock::ne
 
 {% for model in models %}
 {%- if model.object %}
-#[derive(Deserialize, Serialize, Debug,{% if not options.skipValidate %} Validate,{% endif %} Clone{% if model.object.properties | filter(attribute="required", value=true) | length == 0 %}, Default{% endif %})]
-{% set modelName = m::model_name(name = model.object.name) %}
+#[derive(Deserialize, Serialize, Debug,{% if not options.skipValidate | default(value=false) %} Validate,{% endif %} Clone{% if [item for item in model.object.properties if item.required == true] | length == 0 %}, Default{% endif %})]
+{% set modelName = <model_name name={model.object.name}/> %}
 pub struct {{ modelName }} {
     {%- set filtered_properties = model.object.properties | filter_not(attribute="type", value="const") %}
     {% for property in filtered_properties -%}
-    {{ m::model_validation(model = property, options = options) }}
+    {{ <model_validation model={property} options={options}/> }}
     #[serde(rename = "{{ property.name }}"{% if not property.required and property.nullable %}, default, deserialize_with = "optional_nullable"{% elif not property.required %}, skip_serializing_if = "Option::is_none"{% endif %})]
-    pub {{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %},
+    pub {{ <property_name name={property.name}/> }}: {% if not property.required %}Option<{% endif %}{{ <type property={property}/> }}{% if not property.required %}>{% endif %},
     {%- endfor %}
 
     {%- if model.object.additional and (options.additionalProperties or modelName in additionalPropertiesModels) %}
-    {{ m::model_validation(model = "none", options = options) }}
+    {{ <model_validation model="none" options={options}/> }}
     #[serde(flatten)]
     pub additional_properties: std::collections::HashMap<String, serde_json::Value>,
     {%- endif %}
 }
 {# if sort required first #}
-impl {{ m::model_name(name = model.object.name) }} {
-    pub fn new({%- for property in filtered_properties -%}{{ m::property_name(name = property.name) }}: {% if not property.required %}Option<{% endif %}{{ m::type(property = property) }}{% if not property.required %}>{% endif %}, {% endfor -%}{%- if model.object.additional and (options.additionalProperties or modelName in additionalPropertiesModels) %} additional_properties: std::collections::HashMap<String, serde_json::Value>{%- endif %}) -> Self {
+impl {{ <model_name name={model.object.name}/> }} {
+    pub fn new({%- for property in filtered_properties -%}{{ <property_name name={property.name}/> }}: {% if not property.required %}Option<{% endif %}{{ <type property={property}/> }}{% if not property.required %}>{% endif %}, {% endfor -%}{%- if model.object.additional and (options.additionalProperties or modelName in additionalPropertiesModels) %} additional_properties: std::collections::HashMap<String, serde_json::Value>{%- endif %}) -> Self {
         Self {
             {% for property in filtered_properties -%}
-            {{ m::property_name(name = property.name) }},
+            {{ <property_name name={property.name}/> }},
             {%- endfor %}
             {%- if model.object.additional and (options.additionalProperties or modelName in additionalPropertiesModels) %}
             additional_properties,
             {%- endif %}
         }
     }
-    {%- for property in model.object.properties | filter(attribute="type", value="const") -%}
+    {%- for property in [item for item in model.object.properties if item.type == "const"] -%}
     // todo: add to serialization as static
-    pub fn get_{{ m::property_name(name = property.name) }}(&self) -> {{ m::type(property = property.model) }} {
+    pub fn get_{{ <property_name name={property.name}/> }}(&self) -> {{ <type property={property.model}/> }} {
         {%- if property.model.type == "string" %}
         "{{ property.model.name }}".to_string()
         {%- endif %}
@@ -67,30 +64,30 @@ impl {{ m::model_name(name = model.object.name) }} {
     {%- endfor %}
 }
 
-{{ e::model_object_impl(model = model, options = options) }}
+{{ <model_object_impl model={model} options={options}/> }}
 
 {%- elif model.enum %}
-#[derive({%- if model.enum.type in ["number", "integer"] %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone{% if not options.skipValidate %}, Validate{% endif %})]
+#[derive({%- if model.enum.type in ["number", "integer"] %}serde_repr::Serialize_repr, serde_repr::Deserialize_repr{% else %}Deserialize, Serialize{% endif %}, Debug, Clone{% if not options.skipValidate | default(value=false) %}, Validate{% endif %})]
 {%- if model.enum.type in ["number", "integer"] %}
 #[repr(u32)]
 {%- endif %}
-pub enum {{ m::model_name(name = model.enum.name) }}Variant {
+pub enum {{ <model_name name={model.enum.name}/> }}Variant {
     {% for option in model.enum.options -%}
     {% if option == "*" -%}
     #[serde(rename = "{{ option }}")]
     {%- set a = 'SignStar' %}
-    {{ m::enum_variant(name = a, base = m::model_name(name = a) ) }},
+    {{ <enum_variant name={a} base_name={a}/> }},
     {% elif option == option | when_numeric(prefix="n") | pascalcase -%}
     {{ option }},
     {% elif model.enum.type in ["number", "integer"] -%}
-    {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }} = {{ option }},
-    {% elif option is matching("^[\d]+") -%}
+    {{ <enum_variant name={option} base_name={model.enum.name}/> }} = {{ option }},
+    {% elif option[0] in ["0","1","2","3","4","5","6","7","8","9"] -%}
     #[serde(rename = "{{ option }}")]
     {%- set a = 'Code' ~ option %}
-    {{ m::enum_variant(name = a, base = m::model_name(name = a)) }},
+    {{ <enum_variant name={a} base_name={a}/> }},
     {% else -%}
     #[serde(rename = "{{ option }}")]
-    {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) %}
+    {%- set variant_name = <enum_variant name={option} base_name={model.enum.name}/> %}
     {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }},
 
     {%- endif -%}
@@ -99,22 +96,22 @@ pub enum {{ m::model_name(name = model.enum.name) }}Variant {
     {{- clear_bucket(bucket="enum") }}
 }
 
-impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
+impl AsRef<str> for {{ <model_name name={model.enum.name}/> }}Variant {
     fn as_ref(&self) -> &str {
         match self {
             {%- for option in model.enum.options %}
             Self::{%- if option == "*" -%}
             {%- set a = 'SignStar' -%}
-            {{- m::enum_variant(name = a, base = m::model_name(name = a) ) -}}
+            {{- <enum_variant name={a} base_name={a}/> -}}
             {%- elif option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
             {%- elif model.enum.type in ["number", "integer"] -%}
-            {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
-            {%- elif option is matching("^[\d]+") -%}
+            {{ <enum_variant name={option} base_name={model.enum.name}/> }}
+            {%- elif option[0] in ["0","1","2","3","4","5","6","7","8","9"] -%}
             {%- set a = 'Code' ~ option -%}
-            {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
+            {{ <enum_variant name={a} base_name={a}/> }}
             {%- else -%}
-            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) -%}
+            {%- set variant_name = <enum_variant name={option} base_name={model.enum.name}/> -%}
             {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }}
             {%- endif %} => "{{ option }}",
             {%- endfor %}
@@ -124,13 +121,13 @@ impl AsRef<str> for {{ m::model_name(name = model.enum.name) }}Variant {
     }
 }
 
-impl std::fmt::Display for {{ m::model_name(name = model.enum.name) }}Variant {
+impl std::fmt::Display for {{ <model_name name={model.enum.name}/> }}Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_ref())
     }
 }
 
-impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
+impl FromStr for {{ <model_name name={model.enum.name}/> }}Variant {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -138,16 +135,16 @@ impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
             {%- for option in model.enum.options %}
             "{{ option }}" => Ok(Self::{%- if option == "*" %}
             {%- set a = 'SignStar' %}
-            {{- m::enum_variant(name = a, base = m::model_name(name = a) ) }}
+            {{- <enum_variant name={a} base_name={a}/> }}
             {%- elif option == option | when_numeric(prefix="n") | pascalcase -%}
             {{ option }}
             {%- elif model.enum.type in ["number", "integer"] -%}
-            {{ m::enum_variant(name = option, base = m::model_name(name = model.enum.name) ) }}
-            {%- elif option is matching("^[\d]+") -%}
+            {{ <enum_variant name={option} base_name={model.enum.name}/> }}
+            {%- elif option[0] in ["0","1","2","3","4","5","6","7","8","9"] -%}
             {%- set a = 'Code' ~ option -%}
-            {{ m::enum_variant(name = a, base = m::model_name(name = a)) }}
+            {{ <enum_variant name={a} base_name={a}/> }}
             {%- else -%}
-            {%- set variant_name = m::enum_variant(name = option, base = m::model_name(name = model.enum.name)) -%}
+            {%- set variant_name = <enum_variant name={option} base_name={model.enum.name}/> -%}
             {{ variant_name }}{{ get_bucket_count(bucket="enum", name=variant_name ) }}
             {%- endif %}),
             {%- endfor %}
@@ -158,7 +155,7 @@ impl FromStr for {{ m::model_name(name = model.enum.name) }}Variant {
     }
 }
 
-impl std::convert::TryFrom<String> for {{ m::model_name(name = model.enum.name) }}Variant {
+impl std::convert::TryFrom<String> for {{ <model_name name={model.enum.name}/> }}Variant {
     type Error = String;
 
     fn try_from(s: String) -> Result<Self, String> {
@@ -168,40 +165,40 @@ impl std::convert::TryFrom<String> for {{ m::model_name(name = model.enum.name) 
 
 {%- elif model.wrapper %}
 {% if model.wrapper.strategy and model.wrapper.strategy == "externally" %}
-#[derive(Debug, Clone, {% if not options.skipValidate %}Validate, {% endif %}Deserialize, Serialize)]
-pub enum {{ m::model_name(name = model.wrapper.name) }} {
+#[derive(Debug, Clone, {% if not options.skipValidate | default(value=false) %}Validate, {% endif %}Deserialize, Serialize)]
+pub enum {{ <model_name name={model.wrapper.name}/> }} {
     {% for option in model.wrapper.models -%}
-    #[serde(rename = "{{ option.x._discriminator.property }}")]
-    {{ option.x._discriminator.property | pascalcase }}(
-        {%- if option.x._discriminator.value.model -%}
-        {{- m::enum_validation(option = option, options = options) }}
-        {{ option.x._discriminator.value.model.name }}{% if option.x._discriminator.value.model.kind == 'string' %}Variant{% endif %}
-        {%- elif option.x._discriminator.value.simple -%}
-        {{- m::enum_validation(option = option, options = options) }}
-        {{ m::type(property = option.x._discriminator.value.simple) }}
+    #[serde(rename = "{{ option.x?._discriminator?.property }}")]
+    {{ option.x?._discriminator?.property | pascalcase }}(
+        {%- if option.x?._discriminator?.value?.model -%}
+        {{- <enum_validation option={option} options={options}/> }}
+        {{ option.x?._discriminator?.value?.model?.name }}{% if option.x?._discriminator?.value?.model?.kind == 'string' %}Variant{% endif %}
+        {%- elif option.x?._discriminator?.value?.simple -%}
+        {{- <enum_validation option={option} options={options}/> }}
+        {{ <type property={option.x?._discriminator?.value?.simple}/> }}
         {%- endif -%}
     ),
     {%- endfor %}
 }
 
 {% elif model.wrapper.strategy.internally %}
-#[derive(Debug, Clone, {% if not options.skipValidate %}Validate, {% endif %}Deserialize, Serialize)]
+#[derive(Debug, Clone, {% if not options.skipValidate | default(value=false) %}Validate, {% endif %}Deserialize, Serialize)]
 #[serde(tag = "{{ model.wrapper.strategy.internally }}")]
-pub enum {{ m::model_name(name = model.wrapper.name) }} {
+pub enum {{ <model_name name={model.wrapper.name}/> }} {
     {% for option in model.wrapper.models -%}
-    #[serde(rename = "{{ option.x._discriminator.value.model.name }}")]
-    {{ option.x._discriminator.value.model.name | pascalcase }}{% if option.x._discriminator.properties | default(value = 0) > 0 %}({{- m::enum_validation(option = option, options = options) }}{{ m::type(property = option) }}){% endif %},
+    #[serde(rename = "{{ option.x?._discriminator?.value?.model?.name }}")]
+    {{ option.x?._discriminator?.value?.model?.name | pascalcase }}{% if option.x?._discriminator?.properties | default(value = 0) > 0 %}({{- <enum_validation option={option} options={options}/> }}{{ <type property={option}/> }}){% endif %},
     {%- endfor %}
 }
 
 {% else -%}
-#[derive(Debug, Clone, {% if not options.skipValidate %}Validate, {% endif %}Serialize, Deserialize)]
+#[derive(Debug, Clone, {% if not options.skipValidate | default(value=false) %}Validate, {% endif %}Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum {{ m::model_name(name = model.wrapper.name) }} {
+pub enum {{ <model_name name={model.wrapper.name}/> }} {
     {% for option in model.wrapper.models -%}
-    {{ m::type(property = option) | pascalcase }}(
-        {{- m::enum_validation(option = option, options = options) }}
-        {{ m::type(property = option) }}
+    {{ <type property={option}/> | pascalcase }}(
+        {{- <enum_validation option={option} options={options}/> }}
+        {{ <type property={option}/> }}
     ),
     {%- endfor %}
 }
@@ -209,7 +206,7 @@ pub enum {{ m::model_name(name = model.wrapper.name) }} {
 {% endif -%}
 
 {%- elif model.primitive %}
-pub type {{ m::model_name(name = model.primitive.name) }} = {{ m::type(property = model.primitive) }};
+pub type {{ <model_name name={model.primitive.name}/> }} = {{ <type property={model.primitive}/> }};
 {% endif %}
 {%- endfor %}
 

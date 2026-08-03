@@ -1,6 +1,5 @@
-{# type=static,filename=rabbitmq/mod.rs,min_version=0.2.0 #}
-{%- import "macros.j2" as m -%}
-{{ m::do_not_modify() }}
+{# type=static,filename=rabbitmq/mod.rs,min_version=1.0.0 #}
+{{<do_not_modify/>}}
 {% set_global apm = options.apm | default(value = []) %}
 
 use lapin::types::FieldTable;
